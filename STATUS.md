@@ -32,8 +32,9 @@ Distributed Optimization*.
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev,learning,plot]
-pytest                                       :: 20 / 20
-ruff check .                                 :: clean
+pytest                                       :: 32 tests
+ruff check .                                 :: lint
+mypy src/dds_adapt                           :: type-check
 python scripts/reproduce.py --seed 0         :: full run, ~3 minutes
 python scripts/reproduce.py --quick --seed 0 :: smoke run, < 1 minute
 ```

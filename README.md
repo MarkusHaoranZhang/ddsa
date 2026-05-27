@@ -2,7 +2,7 @@
 
 Companion code for *Diagnosis-Driven Structural Adaptation: A
 Closed-Loop Architecture for Resilient Distributed Optimization*
-(Lining Xing et al., 2025).
+(Haoran Zhang, Lining Xing et al., 2025).
 
 > **Read first**: [`STATUS.md`](STATUS.md) lists every paper section
 > and what code path implements it. [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md)
@@ -23,8 +23,9 @@ Closed-Loop Architecture for Resilient Distributed Optimization*
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev,learning,plot]
-pytest                                       :: 20 / 20 tests
-ruff check .                                 :: clean
+pytest                                       :: 32 tests, ~10 s
+ruff check .                                 :: lint
+mypy src/dds_adapt                           :: type-check
 python scripts/reproduce.py --quick --seed 0 :: < 1 minute, smoke run
 ```
 
@@ -72,7 +73,7 @@ paper's headline numbers, the offset is documented in
 ```python
 from dds_adapt.runner import ExperimentRunner
 
-runner = ExperimentRunner()                            # 8 satellites, ring + chords topology
+runner = ExperimentRunner(verbose=True)                # ~2 s to train the GDM
 profile, _ = runner.degradation_profile(n_steps=200)   # one-fault decay profile
 metrics, log = runner.run_proposed(profile, seed=0)
 print(metrics)
@@ -82,6 +83,34 @@ print(metrics)
 `log` is an `EngineLog` with per-tick health estimates, optimiser
 targets, and consensus traces. See `scripts/make_figures.py` for how
 to turn one into a plot.
+
+## Debugging a comparative number
+
+Once you have a concrete number you want to explain (e.g. "why is
+Proposed utilisation 0.66 in my run?"), the most direct path is to
+inspect the `EngineLog` produced by a single trajectory:
+
+```python
+from dds_adapt.runner import ExperimentRunner
+
+runner = ExperimentRunner(verbose=True)
+profile, onset = runner.degradation_profile(n_steps=500, eta=0.002, seed=0)
+metrics, log = runner.run_proposed(profile, seed=0)
+
+for k, h_hat in enumerate(log.health_est):           # per-diagnosis-tick estimate
+    print(f"tick {log.diag_steps[k]:>4}  h_hat = {h_hat.round(2)}")
+
+# log.optimiser_targets[k]  - DIGing's per-agent target at tick k
+# log.consensus_history     - raw DIGing trace (for fig_convergence_*)
+# log.detection_tick        - first tick where any h_hat dropped below 0.9
+# log.iters_to_consensus[k] - how many DIGing iters were needed at tick k
+```
+
+The utilisation number printed in the comparative table is the
+time-averaged form built by `ExperimentRunner._utilisation_timeseries`
+on top of an Oracle / no-adaptation cost band; reading that method
+explains the absolute scale, and `KNOWN_DISCREPANCIES.md` discusses
+why this scale differs from the paper's headline 0.78.
 
 ## What is in the box
 
@@ -104,8 +133,27 @@ src/dds_adapt/
 scripts/
   reproduce.py          one-shot driver, dumps results/<seed>/ + figures/
   make_figures.py       13-figure renderer
-tests/                  20 unit + integration tests
+tests/                  32 unit + integration + regression tests
 ```
+
+## Figure index
+
+Each figure answers a specific question. If a hyperparameter sweep
+matters to your decision, the figure here is the cheapest way to see
+its effect; rerun it with `python scripts/make_figures.py --seed 0`.
+
+| Question                                                        | Figure                            | Paper §  |
+|-----------------------------------------------------------------|-----------------------------------|----------|
+| What is the closed-loop architecture?                           | `fig_architecture`                | Fig. 1   |
+| How does ρ (health-variation rate) affect convergence?          | `fig_convergence_rate / time`     | §5.2.1   |
+| How does diagnostic noise σ affect cost?                        | `fig_health_sensitivity`          | §5.2.2   |
+| How does γ trade off safety vs exploitation?                    | `fig_gamma_sensitivity`           | §5.2.3   |
+| Scenario 1 (single-fault actuator): cost / constraint over time | `fig_scenario1_cost / constraint` | §5.4.1   |
+| Scenario 2 (communication loss): cost / variance over time      | `fig_scenario2_cost / variance`   | §5.4.2   |
+| How does topology damage degrade constraint satisfaction?       | `fig_topology_robustness`         | §5.5.1   |
+| Two concurrent faults: estimate vs ground truth                 | `fig_multi_fault`                 | §5.5.2   |
+| Wall time vs formation size N                                   | `fig_scalability`                 | §5.5.3   |
+| Diagnostic accuracy on the high-fidelity GTO stand-in           | `fig_high_fidelity`               | §5.1.1   |
 
 ## CLI
 
@@ -170,8 +218,9 @@ the JSON files alongside it.
 ## Tests
 
 ```cmd
-pytest          :: 20 tests covering every module + closed loop
+pytest          :: 32 tests covering every module, the closed loop, and a bit-pinned regression of the comparative study
 ruff check .    :: lint
+mypy src/dds_adapt :: type-check
 ```
 
 ## Limitations

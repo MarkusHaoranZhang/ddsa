@@ -31,9 +31,12 @@ Degradation in Distributed Optimization*.
   + every figure with a single command.
 * `scripts/make_figures.py`: 13 vector PDFs covering the paper's
   figures plus a high-fidelity diagnostic plot.
-* 20 pytest tests covering each module and the closed-loop pipeline.
-* GitHub Actions CI (`.github/workflows/ci.yml`) running pytest
-  and ruff on Ubuntu and Windows for Python 3.10 / 3.12.
+* 32 pytest tests: per-module unit tests, closed-loop integration,
+  and a bit-pinned numerical-signature regression for the comparative
+  study (rtol=1e-9 on every metric except wall_time).
+* GitHub Actions CI (`.github/workflows/ci.yml`) running ruff +
+  mypy + pytest + a `reproduce.py --quick` end-to-end smoke on
+  Ubuntu and Windows for Python 3.10 / 3.12.
 * `STATUS.md` and `KNOWN_DISCREPANCIES.md` documenting per-claim
   mapping between paper assertions and code outputs.
 

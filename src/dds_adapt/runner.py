@@ -56,6 +56,7 @@ class ExperimentRunner:
         track: str = "numerical",
         seed: int = 0,
         gdm_training_samples: int = Config.N_TRAIN_SAMPLES,
+        verbose: bool = False,
     ) -> None:
         self.n = n_satellites
         self.track = track
@@ -80,10 +81,18 @@ class ExperimentRunner:
         self.beta = Config.BETA
 
         self.diagnostic = RPSDiagnosticModule(n_satellites)
+        if verbose:
+            print(
+                f"[ExperimentRunner] training GDM "
+                f"(N={n_satellites}, samples={gdm_training_samples})...",
+                flush=True,
+            )
         healthy, faulty = train_gdm(
             n_satellites, n_samples=gdm_training_samples, seed=seed
         )
         self.diagnostic.fit(healthy, faulty)
+        if verbose:
+            print("[ExperimentRunner] GDM ready.", flush=True)
 
     # ------------------------------------------------------------------ profiles
     def degradation_profile(

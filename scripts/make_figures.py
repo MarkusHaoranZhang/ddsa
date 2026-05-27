@@ -113,8 +113,7 @@ def fig_convergence(out_dir: Path, runner: ExperimentRunner, seed: int, quick: b
 
     for rho_factor in rho_factors:
         eta = rho_factor * Config.CHARACTERISTIC_HEALTH_RATE
-        np.random.seed(seed)
-        profile, _ = runner.degradation_profile(n_steps, eta=eta)
+        profile, _ = runner.degradation_profile(n_steps, eta=eta, seed=seed)
         log = _proposed_log(runner, profile, seed)
         hist = np.asarray(log.consensus_history, dtype=float)
         histories[float(rho_factor)] = hist.tolist()
@@ -177,9 +176,9 @@ def fig_health_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, q
     for sigma in sigmas:
         gaps = []
         for run_idx in range(3 if not quick else 2):
-            np.random.seed(seed + run_idx * 17)
-            rng = np.random.default_rng(seed + run_idx * 17)
-            profile, _ = runner.degradation_profile(n_steps)
+            local_seed = seed + run_idx * 17
+            rng = np.random.default_rng(local_seed)
+            profile, _ = runner.degradation_profile(n_steps, seed=local_seed)
             noisy = np.clip(profile + rng.normal(0, sigma, profile.shape), 0, 1)
             log = run_closed_loop(
                 health_profile=profile,
@@ -219,8 +218,7 @@ def fig_gamma_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, qu
             Config.GAMMA_NUM = float(gamma)
             runs = []
             for run_idx in range(2 if quick else 3):
-                np.random.seed(seed + run_idx * 17)
-                profile, _ = runner.degradation_profile(300)
+                profile, _ = runner.degradation_profile(300, seed=seed + run_idx * 17)
                 m, _ = runner.run_proposed(profile, seed + run_idx)
                 runs.append(m["utilization"])
             util.append(float(np.mean(runs)))
@@ -239,10 +237,8 @@ def fig_gamma_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, qu
 # ----------------------------------------------------- 6 + 7. scenario 1 trajectories
 def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 500 if not quick else 200
-    np.random.seed(seed)
-    profile, _ = actuator_degradation_profile(
-        runner.n, n_steps, eta=Config.ETA_SINGLE, onset_time=80
-    )
+    profile, _ = actuator_degradation_profile(        runner.n, n_steps, eta=Config.ETA_SINGLE, onset_time=80
+    , rng=np.random.default_rng(seed))
 
     methods = {
         "Proposed": runner.run_proposed,
@@ -293,8 +289,7 @@ def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
 # ----------------------------------------------------- 8 + 9. scenario 2
 def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 500 if not quick else 200
-    np.random.seed(seed)
-    profile, _ = runner.degradation_profile(n_steps)
+    profile, _ = runner.degradation_profile(n_steps, seed=seed)
     edges_to_drop = [(0, 1 % runner.n), (0, 2 % runner.n)]
     w_seq = communication_loss_w_sequence(runner.W, 10, edges_to_drop=edges_to_drop)
 
@@ -351,8 +346,7 @@ def fig_topology(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool
             n_run = 2 if quick else 3
             vals: list[float] = []
             for run_idx in range(n_run):
-                np.random.seed(seed + run_idx * 17)
-                profile, _ = runner.degradation_profile(n_steps)
+                profile, _ = runner.degradation_profile(n_steps, seed=seed + run_idx * 17)
                 if n_rem == 0:
                     w_seq = None
                 else:
@@ -375,8 +369,7 @@ def fig_topology(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool
 # ----------------------------------------------------- 11. multi-fault
 def fig_multi_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 600 if not quick else 200
-    np.random.seed(seed)
-    profile, _ = concurrent_degradation_profile(runner.n, n_steps, onset_time=80)
+    profile, _ = concurrent_degradation_profile(runner.n, n_steps, onset_time=80, rng=np.random.default_rng(seed))
     _, log = runner.run_proposed(profile, seed)
     h_true = np.stack(log.true_health)
     h_est = np.stack(log.health_est)
@@ -403,8 +396,7 @@ def fig_scalability(out_dir: Path, seed: int, quick: bool):
         sub = ExperimentRunner(n_satellites=size, seed=seed)
         ws = []
         for run_idx in range(2 if quick else 3):
-            np.random.seed(seed + run_idx * 17)
-            profile, _ = sub.degradation_profile(200)
+            profile, _ = sub.degradation_profile(200, seed=seed + run_idx * 17)
             m, _ = sub.run_proposed(profile, seed + run_idx)
             ws.append(m["wall_time"])
         walls.append(float(np.mean(ws)))

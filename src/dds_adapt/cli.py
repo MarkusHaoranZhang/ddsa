@@ -51,7 +51,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  Trajectory steps: {args.n_steps}")
     print(f"  Seed:             {args.seed}")
     runner = ExperimentRunner(
-        n_satellites=args.n_satellites, track="numerical", seed=args.seed
+        n_satellites=args.n_satellites, track="numerical",
+        seed=args.seed, verbose=True,
     )
     print(f"  lambda_2(W):      {runner.lambda2:.4f}")
 

@@ -79,7 +79,8 @@ def main() -> None:
         n_steps = args.n_steps
 
     runner = ExperimentRunner(
-        n_satellites=Config.NUM_SATELLITES, track="numerical", seed=args.seed
+        n_satellites=Config.NUM_SATELLITES, track="numerical",
+        seed=args.seed, verbose=True,
     )
 
     out_dir = args.results_dir / f"seed{args.seed}"
