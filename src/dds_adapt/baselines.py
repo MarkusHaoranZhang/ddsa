@@ -40,13 +40,14 @@ class BaselineRobustDO:
         W: np.ndarray,
         alpha: float = Config.ALPHA_NUM,
         robustness_margin: float = 0.3,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.n = n_agents
         self.dim = dim
         self.W = W
         self.alpha = alpha
         self.margin = robustness_margin
-        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
 
     def conservative_health(self) -> np.ndarray:
         """Uniform ``1 - margin`` health vector used by the runner override."""
@@ -72,13 +73,14 @@ class BaselineFDIReconf:
         W: np.ndarray,
         alpha: float = Config.ALPHA_NUM,
         residual_threshold: float = 0.3,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.n = n_agents
         self.dim = dim
         self.W = W
         self.alpha = alpha
         self.residual_threshold = residual_threshold
-        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
         self.isolated = np.zeros(n_agents, dtype=bool)
 
     def detect(self, residual_energy: np.ndarray) -> np.ndarray:
@@ -103,13 +105,14 @@ class BaselineByzantineResilient:
         W: np.ndarray,
         alpha: float = Config.ALPHA_NUM,
         trim_ratio: float = 0.2,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.n = n_agents
         self.dim = dim
         self.W = W
         self.alpha = alpha
         self.trim_ratio = trim_ratio
-        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
 
     def trimmed_mean(self, x: np.ndarray) -> np.ndarray:
         """Per-coordinate trimmed mean with a ``trim_ratio`` cut on each side."""
@@ -194,9 +197,10 @@ class BaselineOracle:
         dim: int,
         W: np.ndarray,
         alpha: float = Config.ALPHA_NUM,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.n = n_agents
         self.dim = dim
         self.W = W
         self.alpha = alpha
-        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)

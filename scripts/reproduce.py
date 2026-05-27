@@ -23,8 +23,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
-
 from dds_adapt.config import Config
 from dds_adapt.runner import ExperimentRunner
 
@@ -80,7 +78,6 @@ def main() -> None:
         n_runs = args.n_runs
         n_steps = args.n_steps
 
-    np.random.seed(args.seed)
     runner = ExperimentRunner(
         n_satellites=Config.NUM_SATELLITES, track="numerical", seed=args.seed
     )

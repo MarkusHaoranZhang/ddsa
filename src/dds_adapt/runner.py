@@ -92,6 +92,7 @@ class ExperimentRunner:
         eta: float = Config.ETA_SINGLE,
         onset_time: int | None = None,
         agent_idx: int = 0,
+        seed: int | None = None,
     ) -> tuple[np.ndarray, int]:
         return actuator_degradation_profile(
             self.n,
@@ -99,7 +100,7 @@ class ExperimentRunner:
             eta=eta,
             onset_time=onset_time,
             agent_idx=agent_idx,
-            rng=np.random.default_rng(),
+            rng=np.random.default_rng(seed),
         )
 
     def concurrent_degradation_profile(
@@ -108,7 +109,9 @@ class ExperimentRunner:
         eta_fast: float = Config.ETA_FAST,
         eta_slow: float = Config.ETA_SLOW,
         onset_time: int = 80,
+        seed: int | None = None,
     ) -> tuple[np.ndarray, int]:
+        del seed  # concurrent profile is deterministic given onset_time
         return concurrent_degradation_profile(
             self.n,
             n_steps,
@@ -189,7 +192,8 @@ class ExperimentRunner:
         # FDI: detect from residual energy, then physically remove the
         # offending agent from the formation. Per Section 5.1.2:
         # "isolates...recomputes the formation using only healthy agents".
-        fdi = BaselineFDIReconf(self.n, 2, self.W, self.alpha)
+        rng = np.random.default_rng(seed)
+        fdi = BaselineFDIReconf(self.n, 2, self.W, self.alpha, rng=rng)
         sim = SatelliteFormationSimulator(self.n, seed=seed)
         sim.desired_positions = self.desired_positions.copy()
 
@@ -240,7 +244,8 @@ class ExperimentRunner:
         # directly comparable.
         sim = SatelliteFormationSimulator(self.n, seed=seed)
         sim.desired_positions = self.desired_positions.copy()
-        baseline = BaselineByzantineResilient(self.n, 2, self.W, self.alpha)
+        rng = np.random.default_rng(seed)
+        baseline = BaselineByzantineResilient(self.n, 2, self.W, self.alpha, rng=rng)
 
         log = EngineLog()
         n_steps = health_profile.shape[1]
@@ -484,8 +489,7 @@ class ExperimentRunner:
         results: dict[str, list[dict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
-            np.random.seed(seed)
-            profile, _ = self.degradation_profile(n_steps, eta=eta)
+            profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
 
             method_runs: dict[str, tuple[dict, EngineLog]] = {}
             for name, fn in methods.items():
@@ -583,8 +587,7 @@ class ExperimentRunner:
         results: dict[str, list[dict]] = {name: [] for name in variants}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
-            np.random.seed(seed)
-            profile, _ = self.degradation_profile(n_steps, eta=eta)
+            profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
             _, oracle_log = self.run_oracle(profile, seed)
             _, no_adapt_log = self._run_no_adaptation(profile, seed)
             band = (
@@ -630,8 +633,7 @@ class ExperimentRunner:
         results: dict[str, list[dict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
-            np.random.seed(seed)
-            profile, _ = self.degradation_profile(n_steps, eta=eta)
+            profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
             for name, fn in methods.items():
                 m, _ = fn(profile, seed)
                 results[name].append(m)
@@ -649,8 +651,7 @@ class ExperimentRunner:
         for mode in modes:
             for run_idx in range(n_runs):
                 seed = self.seed + run_idx * 1009
-                np.random.seed(seed)
-                profile, _ = self.degradation_profile(n_steps)
+                profile, _ = self.degradation_profile(n_steps, seed=seed)
                 w_seq = perturb_topology(
                     self.W,
                     n_intervals=10,
@@ -681,8 +682,7 @@ class ExperimentRunner:
         results: dict[str, list[dict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
-            np.random.seed(seed)
-            profile, _ = self.concurrent_degradation_profile(n_steps)
+            profile, _ = self.concurrent_degradation_profile(n_steps, seed=seed)
             for name, fn in methods.items():
                 m, _ = fn(profile, seed)
                 results[name].append(m)
@@ -703,8 +703,7 @@ class ExperimentRunner:
             metric_runs: list[dict] = []
             for run_idx in range(n_runs):
                 seed = run_idx * 1009
-                np.random.seed(seed)
-                profile, _ = sub.degradation_profile(n_steps)
+                profile, _ = sub.degradation_profile(n_steps, seed=seed)
                 m, _ = sub.run_proposed(profile, seed)
                 metric_runs.append(m)
             wall = float(np.mean([m["wall_time"] for m in metric_runs]))

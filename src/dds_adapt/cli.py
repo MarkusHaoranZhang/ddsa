@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-import numpy as np
-
 from dds_adapt.config import Config
 from dds_adapt.runner import ExperimentRunner
 
@@ -42,7 +40,6 @@ def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    np.random.seed(args.seed)
     Config.N_RUNS = args.n_runs
 
     print("=" * 80)

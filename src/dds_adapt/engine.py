@@ -130,7 +130,9 @@ def run_closed_loop(
         sim.desired_positions = desired_positions.copy()
     else:
         sim = simulator_factory()
-    optimiser = DIGingOptimizer(n_agents=n, dim=2, W=W_base.copy(), alpha=alpha)
+    optimiser = DIGingOptimizer(
+        n_agents=n, dim=2, W=W_base.copy(), alpha=alpha, rng=rng
+    )
 
     log = EngineLog()
     total_steps = health_profile.shape[1]

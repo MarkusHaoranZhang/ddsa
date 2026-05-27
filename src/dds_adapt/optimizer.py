@@ -18,13 +18,15 @@ class DIGingOptimizer:
         dim: int,
         W: np.ndarray,
         alpha: float = Config.ALPHA_NUM,
+        rng: np.random.Generator | None = None,
     ) -> None:
         self.n = n_agents
         self.dim = dim
         self.W = W
         self.alpha = alpha
+        self._rng = rng if rng is not None else np.random.default_rng()
 
-        self.x = np.random.randn(n_agents, dim) * 0.1
+        self.x = self._rng.standard_normal((n_agents, dim)) * 0.1
         self.y = np.zeros((n_agents, dim))
         self.grad_prev = np.zeros((n_agents, dim))
 
@@ -84,7 +86,7 @@ class DIGingOptimizer:
         return self.x, history
 
     def reset(self) -> None:
-        self.x = np.random.randn(self.n, self.dim) * 0.1
+        self.x = self._rng.standard_normal((self.n, self.dim)) * 0.1
         self.y = np.zeros((self.n, self.dim))
         self.grad_prev = np.zeros((self.n, self.dim))
 
