@@ -125,9 +125,11 @@ def run_closed_loop(
         edges = Config.edges(n)
 
     rng = np.random.default_rng(seed)
+    sim: _SimulatorProtocol
     if simulator_factory is None:
-        sim = SatelliteFormationSimulator(n_satellites=n, dt=sim_dt, seed=seed)
-        sim.desired_positions = desired_positions.copy()
+        concrete_sim = SatelliteFormationSimulator(n_satellites=n, dt=sim_dt, seed=seed)
+        concrete_sim.desired_positions = desired_positions.copy()
+        sim = concrete_sim
     else:
         sim = simulator_factory()
     optimiser = DIGingOptimizer(

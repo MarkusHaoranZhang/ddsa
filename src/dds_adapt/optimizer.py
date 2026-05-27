@@ -53,6 +53,7 @@ class DIGingOptimizer:
         if global_grad_func is not None:
             grad_curr = global_grad_func(self.x, health)
         else:
+            assert grad_func is not None  # narrowed by the raise above
             grad_curr = np.zeros_like(self.x)
             for i in range(self.n):
                 grad_curr[i] = grad_func(self.x[i], i, health[i])
