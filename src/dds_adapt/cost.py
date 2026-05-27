@@ -1,0 +1,131 @@
+"""Cost functions and gradients for the formation-keeping objective.
+
+Implements the cost described in Section 5.1.1 of the paper:
+
+* per-agent tracking term :math:`f_i(x_i) = \\tfrac{1}{2}\\|x_i - x_i^{des}\\|^2`
+* formation-keeping coupling
+  :math:`\\tfrac{\\beta}{2} \\sum_{(i,j) \\in \\mathcal{E}}
+  \\|x_i - x_j - d_{ij}\\|^2`
+* health-driven safe-anchor regulariser
+  :math:`\\tfrac{1-h_i}{2} \\gamma \\|x_i - x_i^{ref}\\|^2`
+
+The first two come from the paper's experimental setting; the third is
+the structural-adaptation term from Section 3.2 (Eq. 3 + 4).
+
+Because the coupling term needs neighbour positions, every cost / gradient
+function takes a global state ``X`` of shape ``(N, 2)`` instead of a
+single agent's ``x_i``. The DIGing optimiser supplies ``X`` from its
+own iterate matrix, which is what the gradient-tracking algorithm
+already maintains.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from dds_adapt.config import Config
+
+
+def _safe_anchor(desired_positions: np.ndarray, safe_offset: float) -> np.ndarray:
+    """Per-agent safe state.
+
+    Section 5.1.1 of the paper does not specify a separate ``x_i^0`` that
+    differs from the formation reference ``x_i^des``; we therefore
+    default to ``Config.SAFE_OFFSET`` and let callers override it for
+    a distinct safe state.
+    """
+    return desired_positions + safe_offset
+
+
+def formation_cost_global(
+    X: np.ndarray,
+    health: np.ndarray,
+    desired_positions: np.ndarray,
+    edges: list[tuple[int, int]],
+    beta: float = Config.BETA,
+    gamma: float = Config.GAMMA_NUM,
+    safe_offset: float = Config.SAFE_OFFSET,
+) -> float:
+    """Sum of all three cost components for a global state ``X``."""
+    n = len(desired_positions)
+    safe = _safe_anchor(desired_positions, safe_offset)
+
+    tracking = 0.0
+    reg = 0.0
+    for i in range(n):
+        tracking += 0.5 * health[i] * np.linalg.norm(X[i] - desired_positions[i]) ** 2
+        reg += 0.5 * (1 - health[i]) * gamma * np.linalg.norm(X[i] - safe[i]) ** 2
+
+    coupling = 0.0
+    for i, j in edges:
+        d_ij = desired_positions[i] - desired_positions[j]
+        coupling += np.linalg.norm(X[i] - X[j] - d_ij) ** 2
+    coupling *= 0.5 * beta
+
+    return float(tracking + coupling + reg)
+
+
+def formation_grad_global(
+    X: np.ndarray,
+    health: np.ndarray,
+    desired_positions: np.ndarray,
+    edges: list[tuple[int, int]],
+    beta: float = Config.BETA,
+    gamma: float = Config.GAMMA_NUM,
+    safe_offset: float = Config.SAFE_OFFSET,
+) -> np.ndarray:
+    """Per-agent gradient of :func:`formation_cost_global`.
+
+    Returns an ``(N, 2)`` array whose ``i``-th row is
+    :math:`\\nabla_{x_i} \\tilde F`. Each agent's gradient depends on its
+    neighbours' positions through the coupling term; this is the
+    inter-agent coupling that makes the consensus cost non-trivial and
+    therefore makes ``health`` actually move the optimum.
+    """
+    n = len(desired_positions)
+    safe = _safe_anchor(desired_positions, safe_offset)
+    grad = np.zeros_like(X)
+
+    for i in range(n):
+        grad[i] = health[i] * (X[i] - desired_positions[i])
+        grad[i] += (1.0 - health[i]) * gamma * (X[i] - safe[i])
+
+    for i, j in edges:
+        d_ij = desired_positions[i] - desired_positions[j]
+        diff = X[i] - X[j] - d_ij
+        grad[i] += beta * diff
+        grad[j] -= beta * diff
+
+    return grad
+
+
+# ---------------- Backward-compatible per-agent helpers --------------
+def formation_cost(
+    x_i: np.ndarray,
+    i: int,
+    h_i: float,
+    desired_positions: np.ndarray,
+    safe_offset: float = Config.SAFE_OFFSET,
+) -> float:
+    """Tracking + safe-anchor terms for a single agent (no coupling)."""
+    desired = desired_positions[i]
+    safe = desired + safe_offset
+    tracking = 0.5 * np.linalg.norm(x_i[:2] - desired) ** 2
+    regulariser = 0.5 * Config.GAMMA_NUM * np.linalg.norm(x_i[:2] - safe) ** 2
+    return float(h_i * tracking + (1 - h_i) * regulariser)
+
+
+def formation_gradient(
+    x_i: np.ndarray,
+    i: int,
+    h_i: float,
+    desired_positions: np.ndarray,
+    safe_offset: float = Config.SAFE_OFFSET,
+) -> np.ndarray:
+    """Single-agent gradient (no coupling). Kept for tests + simple drivers."""
+    grad = np.zeros_like(x_i)
+    desired = desired_positions[i]
+    safe = desired + safe_offset
+    grad[:2] = h_i * (x_i[:2] - desired)
+    grad[:2] += (1 - h_i) * Config.GAMMA_NUM * (x_i[:2] - safe)
+    return grad

@@ -1,0 +1,202 @@
+"""Baseline methods used for the comparative study.
+
+Each baseline mirrors a specific question raised in Section 5.1.2 of the
+paper:
+
+* Robust DO     - "why not just shrink confidence margins?"
+* FDI-Reconf    - "why not detect-and-isolate above a threshold?"
+* Byzantine     - "do existing adversarial-aggregation rules cope?"
+* D-S Fusion    - "is RPS strictly better than Dempster-Shafer combination?"
+* Oracle        - upper bound when health is perfectly known.
+
+The classes here are deliberately thin: they hold the *configuration*
+of each baseline (margin, threshold, trim ratio) and the operators it
+needs (e.g. trimmed mean, Dempster combination). Closed-loop wiring
+lives in ``runner.py`` so that every method shares the same engine
+plumbing and therefore the same logging surface.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from dds_adapt.config import Config
+from dds_adapt.optimizer import DIGingOptimizer
+
+
+# ---------------------------------------------------------------------- DO
+class BaselineRobustDO:
+    """Robust distributed optimisation: conservative cost-function weighting.
+
+    The paper describes the baseline as treating degradation as bounded
+    disturbance through a uniform conservative weight (``1 - margin``) on
+    every agent's cost contribution, rather than estimating health.
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        dim: int,
+        W: np.ndarray,
+        alpha: float = Config.ALPHA_NUM,
+        robustness_margin: float = 0.3,
+    ) -> None:
+        self.n = n_agents
+        self.dim = dim
+        self.W = W
+        self.alpha = alpha
+        self.margin = robustness_margin
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+
+    def conservative_health(self) -> np.ndarray:
+        """Uniform ``1 - margin`` health vector used by the runner override."""
+        return np.full(self.n, 1.0 - self.margin)
+
+
+# ----------------------------------------------------------------- FDI
+class BaselineFDIReconf:
+    """Threshold-based fault detection-isolation-reconfiguration.
+
+    Detection is triggered by the *residual* energy crossing a fixed
+    threshold (the same residual the diagnostic module uses). Once an
+    agent is flagged, the runner pins its iterate to the formation
+    reference and zeroes its row of the gradient (see ``engine.py``'s
+    ``isolation_mask`` argument), realising the paper's "recompute the
+    formation using only healthy agents" semantics.
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        dim: int,
+        W: np.ndarray,
+        alpha: float = Config.ALPHA_NUM,
+        residual_threshold: float = 0.3,
+    ) -> None:
+        self.n = n_agents
+        self.dim = dim
+        self.W = W
+        self.alpha = alpha
+        self.residual_threshold = residual_threshold
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+        self.isolated = np.zeros(n_agents, dtype=bool)
+
+    def detect(self, residual_energy: np.ndarray) -> np.ndarray:
+        """Mark agents whose residual energy exceeds the threshold."""
+        self.isolated |= residual_energy > self.residual_threshold
+        return self.isolated.copy()
+
+
+# -------------------------------------------------------------- Byzantine
+class BaselineByzantineResilient:
+    """Coordinate-wise trimmed-mean aggregation, adversarial-style baseline.
+
+    The class holds the trim ratio plus a private ``DIGingOptimizer``
+    instance the runner reuses for its custom Byzantine-aware update
+    loop (``runner._byzantine_optimise``).
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        dim: int,
+        W: np.ndarray,
+        alpha: float = Config.ALPHA_NUM,
+        trim_ratio: float = 0.2,
+    ) -> None:
+        self.n = n_agents
+        self.dim = dim
+        self.W = W
+        self.alpha = alpha
+        self.trim_ratio = trim_ratio
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)
+
+    def trimmed_mean(self, x: np.ndarray) -> np.ndarray:
+        """Per-coordinate trimmed mean with a ``trim_ratio`` cut on each side."""
+        n_trim = max(1, int(self.n * self.trim_ratio))
+        sorted_x = np.sort(x, axis=0)
+        trimmed = sorted_x[n_trim:-n_trim] if n_trim * 2 < self.n else sorted_x
+        return trimmed.mean(axis=0)
+
+
+# -------------------------------------------------------- Dempster-Shafer
+class BaselineDSFusion:
+    """Conventional Dempster-Shafer evidence combination.
+
+    Each agent ``i`` reports a binary BPA on the singletons
+    :math:`\\{healthy, faulty\\}` for every other agent ``j``. The fused
+    health estimate is built from the resulting belief in the
+    ``healthy`` singleton. Unlike RPS, no priority ordering between
+    different ``j`` is preserved.
+    """
+
+    def __init__(self, n_agents: int) -> None:
+        self.n = n_agents
+
+    @staticmethod
+    def _combine_two(m1: dict[str, float], m2: dict[str, float]) -> dict[str, float]:
+        """Pairwise Dempster combination on the frame ``{H, F}``."""
+        K = m1["H"] * m2["F"] + m1["F"] * m2["H"]  # conflict
+        denom = max(1.0 - K, 1e-12)
+        out = {
+            "H": (m1["H"] * m2["H"] + m1["H"] * m2["U"] + m1["U"] * m2["H"]) / denom,
+            "F": (m1["F"] * m2["F"] + m1["F"] * m2["U"] + m1["U"] * m2["F"]) / denom,
+            "U": (m1["U"] * m2["U"]) / denom,
+        }
+        # numerical clean-up
+        s = sum(out.values())
+        if s > 0:
+            for k in out:
+                out[k] /= s
+        return out
+
+    def fuse(self, local_health_estimates: np.ndarray) -> np.ndarray:
+        """Combine local soft health estimates via Dempster's rule per agent.
+
+        Parameters
+        ----------
+        local_health_estimates : (N, N) array
+            ``local_health_estimates[i, j]`` is agent ``i``'s soft belief
+            that agent ``j`` is healthy (a number in ``[0, 1]``).
+        """
+        E = np.clip(np.asarray(local_health_estimates), 0.0, 1.0)
+        out = np.zeros(self.n)
+        for j in range(self.n):
+            # convert each soft estimate into a BPA with a small mass on
+            # ignorance so Dempster combination stays well-behaved
+            mass_list = []
+            for i in range(self.n):
+                p = float(E[i, j])
+                u = 0.1  # mass on ignorance
+                h = (1 - u) * p
+                f = (1 - u) * (1 - p)
+                mass_list.append({"H": h, "F": f, "U": u})
+            fused = mass_list[0]
+            for k in range(1, self.n):
+                fused = self._combine_two(fused, mass_list[k])
+            # decision: belief in healthy + half of ignorance (pignistic)
+            out[j] = fused["H"] + 0.5 * fused["U"]
+        return np.clip(out, 0.0, 1.0)
+
+
+# -------------------------------------------------------- Oracle
+class BaselineOracle:
+    """Oracle: gets the ground-truth health vector for free.
+
+    Kept as a standalone class so unit tests can construct one without
+    booting the runner; the comparative study runs Oracle through the
+    closed-loop engine via a health-estimate override.
+    """
+
+    def __init__(
+        self,
+        n_agents: int,
+        dim: int,
+        W: np.ndarray,
+        alpha: float = Config.ALPHA_NUM,
+    ) -> None:
+        self.n = n_agents
+        self.dim = dim
+        self.W = W
+        self.alpha = alpha
+        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha)

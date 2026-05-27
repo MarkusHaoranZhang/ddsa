@@ -1,0 +1,68 @@
+cff-version: 1.2.0
+title: >-
+  Diagnosis-Driven Structural Adaptation: Companion Code
+message: >-
+  If you use this code, please cite both the software and the
+  associated paper.
+type: software
+authors:
+  - given-names: Haoran
+    family-names: Zhang
+    email: zhr@stu.xidian.edu.cn
+    affiliation: Xidian University
+  - given-names: Lining
+    family-names: Xing
+    email: lnxing@xidian.edu.cn
+    affiliation: Xidian University
+  - given-names: Zhijie
+    family-names: Zhou
+    email: zhouzj04@tsinghua.org.cn
+    affiliation: Harbin Normal University
+  - given-names: Guohui
+    family-names: Zhou
+    email: zhouguohui@hrbnu.edu.cn
+    affiliation: Harbin Normal University
+  - given-names: Wei
+    family-names: He
+    email: hewei@hrbnu.edu.cn
+    affiliation: Harbin Normal University
+  - given-names: Yuanlong
+    family-names: Zhang
+    email: zhangyl_0728@163.com
+    affiliation: National University of Defense Technology
+  - given-names: Jun
+    family-names: Li
+    email: jli@hnie.edu.cn
+    affiliation: Hunan Institute of Engineering
+repository-code: ''
+license: MIT
+version: 0.1.0
+date-released: '2025-05-27'
+keywords:
+  - distributed optimization
+  - multi-agent systems
+  - random permutation set
+  - fault diagnosis
+  - structural adaptation
+  - elastic degradation
+preferred-citation:
+  type: article
+  title: >-
+    Diagnosis-Driven Structural Adaptation: A Closed-Loop
+    Architecture for Elastic Degradation in Distributed Optimization
+  authors:
+    - given-names: Haoran
+      family-names: Zhang
+    - given-names: Lining
+      family-names: Xing
+    - given-names: Zhijie
+      family-names: Zhou
+    - given-names: Guohui
+      family-names: Zhou
+    - given-names: Wei
+      family-names: He
+    - given-names: Yuanlong
+      family-names: Zhang
+    - given-names: Jun
+      family-names: Li
+  year: 2025
