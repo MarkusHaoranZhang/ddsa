@@ -121,6 +121,55 @@ class ExperimentRunner:
         )
 
     # ----------------------------------------------------- methods
+    #
+    # Every method except Byzantine is a thin wrapper around
+    # ``_run_engine_method``; they only differ in how they construct the
+    # health override and (optionally) the per-tick isolation mask.
+    # Byzantine has its own runner because it does not use ``DIGingOptimizer``
+    # in the standard way.
+    # ------------------------------------------------------------------
+
+    _N_DIAG_INTERVALS = 10
+    _ITERS_PER_DIAG = 50
+
+    def _run_engine_method(
+        self,
+        profile: np.ndarray,
+        seed: int,
+        *,
+        override: np.ndarray | None = None,
+        iso_mask: np.ndarray | None = None,
+        use_w_adaptation: bool = True,
+        w_base_per_interval: list[np.ndarray] | None = None,
+        n_diag_intervals: int | None = None,
+    ) -> tuple[dict, EngineLog]:
+        """Single entry point for every engine-driven method.
+
+        ``override`` (shape ``(n, n_steps)``) lets the caller bypass the
+        RPS module entirely (Oracle, Robust DO, FDI, D-S, every ablation
+        variant). ``iso_mask`` (shape ``(n_intervals, n)``) signals
+        physically isolated agents to the engine.
+        """
+        log = run_closed_loop(
+            health_profile=profile,
+            diagnostic=self.diagnostic,
+            W_base=self.W,
+            desired_positions=self.desired_positions,
+            edges=self.edges,
+            n_diag_intervals=n_diag_intervals or self._N_DIAG_INTERVALS,
+            iters_per_diag=self._ITERS_PER_DIAG,
+            alpha=self.alpha,
+            gamma=self.gamma,
+            beta=self.beta,
+            seed=seed,
+            use_w_adaptation=use_w_adaptation,
+            health_estimate_override=override,
+            w_base_per_interval=w_base_per_interval,
+            isolation_mask=iso_mask,
+        )
+        return self.metrics_from_log(log, profile), log
+
+    # --- engine-driven methods ---------------------------------------
     def run_proposed(
         self,
         health_profile: np.ndarray,
@@ -129,119 +178,205 @@ class ExperimentRunner:
         use_w_adaptation: bool = True,
         w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[dict, EngineLog]:
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
+        return self._run_engine_method(
+            health_profile, seed,
             use_w_adaptation=use_w_adaptation,
             w_base_per_interval=w_base_per_interval,
         )
-        return self.metrics_from_log(log, health_profile), log
 
-    def run_oracle(self, health_profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,  # bypassed by override
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=health_profile,
+    def run_oracle(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        # Override = ground truth; engine bypasses RPS.
+        return self._run_engine_method(
+            health_profile, seed, override=health_profile, use_w_adaptation=True
         )
-        return self.metrics_from_log(log, health_profile), log
 
-    def run_robust_do(self, health_profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        # Robust DO: every agent uses a uniform conservative health value
-        # (1 - margin), and crucially performs no W adaptation.
-        margin = 0.3
+    def run_robust_do(
+        self, health_profile: np.ndarray, seed: int, *, margin: float = 0.3
+    ) -> tuple[dict, EngineLog]:
+        # Robust DO: every agent uses a uniform conservative health, no W
+        # adaptation.
         n_steps = health_profile.shape[1]
         constant = np.full(self.n, 1.0 - margin)
         override = _broadcast_health_profile(constant, n_steps)
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=False,
-            health_estimate_override=override,
+        return self._run_engine_method(
+            health_profile, seed, override=override, use_w_adaptation=False
         )
-        return self.metrics_from_log(log, health_profile), log
 
-    def run_fdi(self, health_profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        # FDI: detect from residual energy, then physically remove the
-        # offending agent from the formation. Per Section 5.1.2:
-        # "isolates...recomputes the formation using only healthy agents".
+    def run_fdi(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        # Per §5.1.2: residual-energy threshold isolates degraded agents
+        # and the engine pins their iterate to the formation reference.
+        iso_mask, override = self._compute_fdi_isolation(health_profile, seed)
+        return self._run_engine_method(
+            health_profile, seed,
+            override=override, iso_mask=iso_mask, use_w_adaptation=True,
+        )
+
+    def run_ds_fusion(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        """§5.4 D-S baseline: Dempster combine + threshold-based reconfiguration.
+
+        Per Section 5.1.2, D-S "applies threshold-based reconfiguration
+        without priority ordering information". Without ordering, D-S
+        cannot cheaply distinguish primary from secondary degradation,
+        so it commits to an isolation only after the fused healthy
+        belief has stayed below the threshold for several consecutive
+        diagnosis intervals -- this reproduces §5.4.1's observation
+        that D-S detection is delayed relative to FDI.
+        """
+        iso_mask, override = self._compute_ds_isolation(health_profile, seed)
+        return self._run_engine_method(
+            health_profile, seed,
+            override=override, iso_mask=iso_mask, use_w_adaptation=True,
+        )
+
+    # --- ablation variants ------------------------------------------
+    def _run_ds_closed_loop(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        """§5.3 Variant A: closed loop + D-S fusion in place of RPSR."""
+        override = self._build_ds_inline_profile(health_profile, seed)
+        return self._run_engine_method(
+            health_profile, seed, override=override, use_w_adaptation=True
+        )
+
+    def _run_average_fusion(
+        self, profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        rng = np.random.default_rng(seed)
+        avg_profile = np.clip(profile + rng.normal(0, 0.15, profile.shape), 0, 1)
+        return self._run_engine_method(
+            profile, seed, override=avg_profile, use_w_adaptation=True
+        )
+
+    def _run_without_sinkhorn(
+        self, profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        return self.run_proposed(profile, seed, use_w_adaptation=False)
+
+    def _run_binary_health(
+        self, profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        binary_profile = (profile > 0.5).astype(float)
+        return self._run_engine_method(
+            profile, seed, override=binary_profile, use_w_adaptation=True
+        )
+
+    def _run_no_adaptation(
+        self, profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        n_steps = profile.shape[1]
+        ones = _broadcast_health_profile(np.ones(self.n), n_steps)
+        return self._run_engine_method(
+            profile, seed, override=ones, use_w_adaptation=False
+        )
+
+    # --- isolation / override builders ------------------------------
+    def _compute_fdi_isolation(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[np.ndarray, np.ndarray]:
         rng = np.random.default_rng(seed)
         fdi = BaselineFDIReconf(self.n, 2, self.W, self.alpha, rng=rng)
         sim = SatelliteFormationSimulator(self.n, seed=seed)
         sim.desired_positions = self.desired_positions.copy()
 
-        n_intervals = 10
-        iso_mask = np.zeros((n_intervals, self.n), dtype=bool)
+        n_intervals = self._N_DIAG_INTERVALS
         n_steps = health_profile.shape[1]
         steps_per_diag = max(1, n_steps // n_intervals)
+        iso_mask = np.zeros((n_intervals, self.n), dtype=bool)
+
         for k in range(n_intervals):
             diag_start = k * steps_per_diag
             if diag_start >= n_steps:
                 break
             sim.set_health(health_profile[:, diag_start])
             residual = sim.sample_residual()
-            own_energy = residual_energy(residual)
-            fdi.detect(own_energy)
+            fdi.detect(residual_energy(residual))
             iso_mask[k] = fdi.isolated.copy()
 
-        # health override: 1.0 for active agents (don't penalise them
-        # via the (1-h) regulariser), 0.0 for isolated agents (so the
-        # cost reflects their lost contribution).
+        # 1.0 for active agents (no spurious (1-h) regulariser),
+        # 0.0 for isolated agents so cost reflects their lost contribution.
         binary_profile = np.ones((self.n, n_steps))
         for k in range(n_intervals):
             diag_start = k * steps_per_diag
             diag_end = min(n_steps, (k + 1) * steps_per_diag)
             binary_profile[iso_mask[k], diag_start:diag_end] = 0.0
+        return iso_mask, binary_profile
 
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=n_intervals,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=binary_profile,
-            isolation_mask=iso_mask,
-        )
-        return self.metrics_from_log(log, health_profile), log
+    def _compute_ds_isolation(
+        self,
+        health_profile: np.ndarray,
+        seed: int,
+        *,
+        threshold: float = 0.5,
+        commit_intervals: int = 4,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        ds = BaselineDSFusion(self.n)
+        sim = SatelliteFormationSimulator(self.n, seed=seed)
+        sim.desired_positions = self.desired_positions.copy()
+        rng = np.random.default_rng(seed)
 
-    def run_byzantine(self, health_profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        # Byzantine baseline uses a different aggregation rule; we run it
-        # outside the engine but log the same telemetry so metrics are
-        # directly comparable.
+        n_intervals = self._N_DIAG_INTERVALS
+        n_steps = health_profile.shape[1]
+        steps_per_diag = max(1, n_steps // n_intervals)
+        iso_mask = np.zeros((n_intervals, self.n), dtype=bool)
+        binary_profile = np.ones((self.n, n_steps))
+        isolated = np.zeros(self.n, dtype=bool)
+        below_count = np.zeros(self.n, dtype=int)
+
+        for k in range(n_intervals):
+            diag_start = k * steps_per_diag
+            if diag_start >= n_steps:
+                break
+            sim.set_health(health_profile[:, diag_start])
+            residual = sim.sample_residual()
+            R = broadcast_residual_matrix(residual_energy(residual), rng)
+            soft = 1.0 / (1.0 + np.exp(15 * (R - 0.04)))
+            h_hat = ds.fuse(soft)
+            below = h_hat < threshold
+            below_count = np.where(below, below_count + 1, 0)
+            isolated |= below_count >= commit_intervals
+            iso_mask[k] = isolated.copy()
+            diag_end = min(n_steps, (k + 1) * steps_per_diag)
+            binary_profile[isolated, diag_start:diag_end] = 0.0
+        return iso_mask, binary_profile
+
+    def _build_ds_inline_profile(
+        self, health_profile: np.ndarray, seed: int
+    ) -> np.ndarray:
+        """Per-tick D-S fused beliefs, used by §5.3 Variant A."""
+        ds = BaselineDSFusion(self.n)
+        sim = SatelliteFormationSimulator(self.n, seed=seed)
+        sim.desired_positions = self.desired_positions.copy()
+        rng = np.random.default_rng(seed)
+
+        n_intervals = self._N_DIAG_INTERVALS
+        n_steps = health_profile.shape[1]
+        steps_per_diag = max(1, n_steps // n_intervals)
+        ds_profile = np.ones((self.n, n_steps))
+
+        for k in range(n_intervals):
+            diag_start = k * steps_per_diag
+            if diag_start >= n_steps:
+                break
+            sim.set_health(health_profile[:, diag_start])
+            residual = sim.sample_residual()
+            R = broadcast_residual_matrix(residual_energy(residual), rng)
+            soft = 1.0 / (1.0 + np.exp(8 * (R - 0.05)))
+            h_hat = ds.fuse(soft)
+            diag_end = min(n_steps, (k + 1) * steps_per_diag)
+            ds_profile[:, diag_start:diag_end] = h_hat[:, None]
+        return ds_profile
+
+    # --- Byzantine: kept separate because it does not use DIGing -------
+    def run_byzantine(
+        self, health_profile: np.ndarray, seed: int
+    ) -> tuple[dict, EngineLog]:
+        """Trimmed-mean aggregation; bypasses DIGing's mixing matrix."""
         sim = SatelliteFormationSimulator(self.n, seed=seed)
         sim.desired_positions = self.desired_positions.copy()
         rng = np.random.default_rng(seed)
@@ -249,7 +384,7 @@ class ExperimentRunner:
 
         log = EngineLog()
         n_steps = health_profile.shape[1]
-        steps_per_diag = max(1, n_steps // 10)
+        steps_per_diag = max(1, n_steps // self._N_DIAG_INTERVALS)
 
         def grad(X: np.ndarray, health: np.ndarray) -> np.ndarray:
             return formation_grad_global(
@@ -257,7 +392,7 @@ class ExperimentRunner:
                 beta=self.beta, gamma=self.gamma,
             )
 
-        for k in range(10):
+        for k in range(self._N_DIAG_INTERVALS):
             diag_start = k * steps_per_diag
             diag_end = min(n_steps, (k + 1) * steps_per_diag)
             if diag_start >= n_steps:
@@ -265,7 +400,9 @@ class ExperimentRunner:
             h_true = health_profile[:, diag_start]
             sim.set_health(h_true)
             _ = sim.sample_residual()
-            x_opt, hist = self._byzantine_optimise(baseline, grad, np.ones(self.n), 50)
+            x_opt, hist = self._byzantine_optimise(
+                baseline, grad, np.ones(self.n), self._ITERS_PER_DIAG
+            )
             for t in range(diag_start + 1, diag_end):
                 sim.set_health(health_profile[:, t])
                 sim.step(sim.commanded_control(x_opt))
@@ -299,127 +436,6 @@ class ExperimentRunner:
             opt.x = np.tile(trimmed, (baseline.n, 1)) - opt.alpha * opt.y
             history.append(float(np.linalg.norm(opt.x - opt.x.mean(axis=0))))
         return opt.x, history
-
-    def run_ds_fusion(
-        self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
-        """§5.4 D-S baseline: Dempster combine + threshold-based reconfiguration.
-
-        Per Section 5.1.2 of the paper:
-            "replaces the RPS module with conventional evidence fusion
-             and applies threshold-based reconfiguration, without priority
-             ordering information."
-
-        We therefore run D-S combine on the per-agent soft healthy beliefs
-        and then *isolate* any agent whose Dempster-fused healthy belief
-        falls below ``1 - threshold`` (i.e. faulty belief above threshold),
-        exactly as FDI does -- the difference is that the detection signal
-        is the D-S fused belief rather than the raw residual energy.
-        """
-        ds = BaselineDSFusion(self.n)
-        sim = SatelliteFormationSimulator(self.n, seed=seed)
-        sim.desired_positions = self.desired_positions.copy()
-        rng = np.random.default_rng(seed)
-
-        n_intervals = 10
-        n_steps = health_profile.shape[1]
-        steps_per_diag = max(1, n_steps // n_intervals)
-        iso_mask = np.zeros((n_intervals, self.n), dtype=bool)
-        binary_profile = np.ones((self.n, n_steps))
-        isolated = np.zeros(self.n, dtype=bool)
-        # Per §5.1.2 D-S "applies threshold-based reconfiguration without
-        # priority ordering information". Without ordering, D-S cannot
-        # cheaply distinguish primary from secondary degradation, so it
-        # commits to an isolation only after the fused healthy belief
-        # has stayed below the threshold for several consecutive
-        # diagnosis intervals. This reproduces §5.4.1's observation
-        # that D-S detection is delayed relative to FDI.
-        threshold = 0.5
-        commit_intervals = 4  # consecutive ticks below threshold required
-        below_count = np.zeros(self.n, dtype=int)
-
-        for k in range(n_intervals):
-            diag_start = k * steps_per_diag
-            if diag_start >= n_steps:
-                break
-            sim.set_health(health_profile[:, diag_start])
-            residual = sim.sample_residual()
-            own_energy = residual_energy(residual)
-            R = broadcast_residual_matrix(own_energy, rng)
-            soft = 1.0 / (1.0 + np.exp(15 * (R - 0.04)))
-            h_hat = ds.fuse(soft)
-            below = h_hat < threshold
-            below_count = np.where(below, below_count + 1, 0)
-            isolated |= below_count >= commit_intervals
-            iso_mask[k] = isolated.copy()
-            diag_end = min(n_steps, (k + 1) * steps_per_diag)
-            binary_profile[isolated, diag_start:diag_end] = 0.0
-
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=n_intervals,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=binary_profile,
-            isolation_mask=iso_mask,
-        )
-        return self.metrics_from_log(log, health_profile), log
-
-    def _run_ds_closed_loop(
-        self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
-        """§5.3 Variant A: keep closed loop, replace RPS by D-S in fusion only.
-
-        This is the ablation variant that asks "what if we kept everything
-        but the priority ordering?". The closed loop, cost adaptation, and
-        Sinkhorn step are all preserved; only the fusion stage uses
-        Dempster combine instead of RPSR.
-        """
-        ds = BaselineDSFusion(self.n)
-        sim = SatelliteFormationSimulator(self.n, seed=seed)
-        sim.desired_positions = self.desired_positions.copy()
-        rng = np.random.default_rng(seed)
-
-        n_steps = health_profile.shape[1]
-        steps_per_diag = max(1, n_steps // 10)
-        ds_profile = np.ones((self.n, n_steps))
-        for k in range(10):
-            diag_start = k * steps_per_diag
-            if diag_start >= n_steps:
-                break
-            sim.set_health(health_profile[:, diag_start])
-            residual = sim.sample_residual()
-            own_energy = residual_energy(residual)
-            R = broadcast_residual_matrix(own_energy, rng)
-            soft = 1.0 / (1.0 + np.exp(8 * (R - 0.05)))
-            h_hat = ds.fuse(soft)
-            diag_end = min(n_steps, (k + 1) * steps_per_diag)
-            ds_profile[:, diag_start:diag_end] = h_hat[:, None]
-
-        log = run_closed_loop(
-            health_profile=health_profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=ds_profile,
-        )
-        return self.metrics_from_log(log, health_profile), log
 
     # -------------------------------------------------------- metrics
     def metrics_from_log(
@@ -503,9 +519,7 @@ class ExperimentRunner:
             )
             for name, (_, log) in method_runs.items():
                 m = self.metrics_from_log(log, profile)
-                m["utilization"] = self._utilisation_timeseries(
-                    log, profile, band, None
-                )
+                m["utilization"] = self._utilisation_timeseries(log, profile, band)
                 results[name].append(m)
         return self._summarise_runs(results)
 
@@ -513,8 +527,7 @@ class ExperimentRunner:
         self,
         log: EngineLog,
         profile: np.ndarray,
-        cost_ideal: float,
-        cost_worst: float,
+        cost_band: tuple[np.ndarray, np.ndarray],
     ) -> float:
         """Time-averaged utilisation across the trajectory.
 
@@ -530,13 +543,11 @@ class ExperimentRunner:
         Time-averaging across diagnosis ticks gives the steady-state
         number reported in Table 5.
 
-        ``cost_ideal`` carries (oracle_per_tick, no_adapt_per_tick) as a
-        tuple; ``cost_worst`` is unused.
+        ``cost_band`` is ``(oracle_per_tick, no_adapt_per_tick)``.
         """
-        del cost_worst
-        if not log.positions or not isinstance(cost_ideal, tuple):
+        if not log.positions:
             return float("nan")
-        cost_oracle_per_tick, cost_no_adapt_per_tick = cost_ideal
+        cost_oracle_per_tick, cost_no_adapt_per_tick = cost_band
         utils: list[float] = []
         for k, pos in enumerate(log.positions):
             t = min(log.diag_steps[k], profile.shape[1] - 1)
@@ -597,9 +608,7 @@ class ExperimentRunner:
             for name, fn in variants.items():
                 _, log = fn(profile, seed)
                 m = self.metrics_from_log(log, profile)
-                m["utilization"] = self._utilisation_timeseries(
-                    log, profile, band, None
-                )
+                m["utilization"] = self._utilisation_timeseries(log, profile, band)
                 results[name].append(m)
         return self._summarise_runs(results)
 
@@ -716,69 +725,7 @@ class ExperimentRunner:
         return results
 
     # ablation variants -------------------------------------------------
-    def _run_average_fusion(self, profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        rng = np.random.default_rng(seed)
-        avg_profile = np.clip(
-            profile + rng.normal(0, 0.15, profile.shape), 0, 1
-        )
-        log = run_closed_loop(
-            health_profile=profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=avg_profile,
-        )
-        return self.metrics_from_log(log, profile), log
-
-    def _run_without_sinkhorn(self, profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        return self.run_proposed(profile, seed, use_w_adaptation=False)
-
-    def _run_binary_health(self, profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        binary_profile = (profile > 0.5).astype(float)
-        log = run_closed_loop(
-            health_profile=profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=True,
-            health_estimate_override=binary_profile,
-        )
-        return self.metrics_from_log(log, profile), log
-
-    def _run_no_adaptation(self, profile: np.ndarray, seed: int) -> tuple[dict, EngineLog]:
-        n_steps = profile.shape[1]
-        ones = _broadcast_health_profile(np.ones(self.n), n_steps)
-        log = run_closed_loop(
-            health_profile=profile,
-            diagnostic=self.diagnostic,
-            W_base=self.W,
-            desired_positions=self.desired_positions,
-            edges=self.edges,
-            n_diag_intervals=10,
-            iters_per_diag=50,
-            alpha=self.alpha,
-            gamma=self.gamma,
-            beta=self.beta,
-            seed=seed,
-            use_w_adaptation=False,
-            health_estimate_override=ones,
-        )
-        return self.metrics_from_log(log, profile), log
+    # (See "ablation variants" inside the methods section above.)
 
     # -------------------------------------------------------- bookkeeping
     @staticmethod
