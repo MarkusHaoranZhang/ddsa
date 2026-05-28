@@ -122,6 +122,7 @@ class NASA42StandInSimulator:
         formation_radius_km: float = 50.0,
         seed: int | None = None,
     ) -> None:
+        """Place ``n_satellites`` on the GTO reference orbit with small along-track offsets."""
         self.n = n_satellites
         self.dt = dt
         self.formation_radius = formation_radius_km * 1e3  # to metres
@@ -157,6 +158,7 @@ class NASA42StandInSimulator:
 
     # ----------------------------------------------------- health
     def set_health(self, health: np.ndarray) -> None:
+        """Set the per-satellite reaction-wheel health (clipped to [0, 1])."""
         self.health = np.clip(health, 0, 1)
 
     # ----------------------------------------------------- controls
@@ -186,29 +188,54 @@ class NASA42StandInSimulator:
         return viscous + coulomb
 
     def _disturbances(self) -> np.ndarray:
-        """Aggregate disturbance acceleration per satellite (3-D)."""
-        # solar radiation pressure: small constant push along inertial +x
+        """Aggregate disturbance acceleration per satellite (3-D, m/s^2).
+
+        Three perturbations are summed, each kept at order-of-magnitude
+        plausible values for a GTO formation rather than calibrated to
+        a specific spacecraft:
+
+        * solar radiation pressure: a small constant inertial-frame push
+          (``4.5e-9 m/s^2`` is the textbook order for a flat plate at
+          1 AU with a reflectivity coefficient near 1.5);
+        * gravity gradient: ``a_GG = -3 mu / r^3 · (r_rel - 3 (r_rel·r_hat) r_hat)``
+          differentiates Newtonian gravity along the formation
+          baseline; for a 50 km baseline at GTO apogee this is on the
+          order of ``1e-9 m/s^2``;
+        * residual atmospheric drag near perigee, scaled to be
+          negligible above ~1.5 R_E and to match the 1e-7 m/s^2
+          GTO-perigee drag ceiling reported in the mission-analysis
+          literature.
+
+        A small Gaussian noise (``disturbance_scale``) is added on top to
+        keep diagnostic residuals non-degenerate from tick to tick.
+        """
+        # solar radiation pressure: constant inertial-frame push along +x
         srp = 4.5e-9 * np.array([1.0, 0.0, 0.0])
-        # gravity gradient: depends on (r - centroid)
+        # gravity gradient on each satellite relative to formation centroid
         centroid = self.state[:, :3].mean(axis=0)
         grav_grad = np.zeros((self.n, 3))
         for k in range(self.n):
-            r_rel = self.state[k, :3] - centroid
-            r_norm = np.linalg.norm(self.state[k, :3])
+            r = self.state[k, :3]
+            r_norm = float(np.linalg.norm(r))
+            r_hat = r / max(r_norm, 1e-9)
+            r_rel = r - centroid
+            # a_GG = -3 mu / r^3 · (r_rel - 3 (r_rel·r_hat) r_hat)
             grav_grad[k] = (
-                3 * MU_EARTH / r_norm**5 * np.dot(r_rel, self.state[k, :3])
-                * self.state[k, :3]
+                -3.0 * MU_EARTH / r_norm**3
+                * (r_rel - 3.0 * float(np.dot(r_rel, r_hat)) * r_hat)
             )
-        # residual drag near perigee (only when r < 1.5 R_E)
+        # residual drag near perigee (smoothly fades to zero above ~1.5 R_E)
         drag = np.zeros((self.n, 3))
         for k in range(self.n):
-            r_norm = np.linalg.norm(self.state[k, :3])
+            r_norm = float(np.linalg.norm(self.state[k, :3]))
             if r_norm < 1.5 * R_EARTH:
-                speed = np.linalg.norm(self.state[k, 3:])
+                speed = float(np.linalg.norm(self.state[k, 3:]))
+                # Reference order-of-magnitude perigee drag at GTO,
+                # scaled by speed and direction-of-motion. Not fitted
+                # to a specific atmosphere model.
                 drag[k] = -1e-12 * speed * self.state[k, 3:]
-        return srp[None, :] + grav_grad * 1e-12 + drag + self.disturbance_scale * (
-            self._rng.normal(0, 1, (self.n, 3))
-        )
+        noise = self.disturbance_scale * self._rng.normal(0, 1, (self.n, 3))
+        return srp[None, :] + grav_grad + drag + noise
 
     def sample_residual(
         self,
@@ -262,7 +289,9 @@ class NASA42StandInSimulator:
 
     # ----------------------------------------------------- compatibility
     def get_state(self) -> np.ndarray:
+        """Copy of the full ``[r_x, r_y, r_z, v_x, v_y, v_z]`` state per satellite."""
         return self.state.copy()
 
     def get_positions(self) -> np.ndarray:
+        """Copy of the position component of every satellite's state."""
         return self.state[:, :3].copy()

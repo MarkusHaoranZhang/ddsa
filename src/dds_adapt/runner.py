@@ -37,7 +37,16 @@ from dds_adapt.scenarios import (
 )
 from dds_adapt.simulator import SatelliteFormationSimulator
 
-MethodFn = Callable[[np.ndarray, int], tuple[dict, EngineLog]]
+# Type aliases used pervasively in this module.
+#
+# A method returns a per-run metric dict (str -> float, NaN allowed)
+# and the engine log. ``_summarise_runs`` aggregates a list of those
+# into a per-metric (mean, std) tuple keyed by metric name; a study's
+# top-level result is then keyed by method name on top of that.
+MetricDict = dict[str, float]
+SummaryDict = dict[str, tuple[float, float]]
+StudyResult = dict[str, SummaryDict]
+MethodFn = Callable[[np.ndarray, int], tuple[MetricDict, EngineLog]]
 
 
 # --------------------------------------------------------- helpers
@@ -58,6 +67,12 @@ class ExperimentRunner:
         gdm_training_samples: int = Config.N_TRAIN_SAMPLES,
         verbose: bool = False,
     ) -> None:
+        """Build the topology, train the GDM, and cache cost-function constants.
+
+        ``track`` selects between the numerical (``ALPHA_NUM``,
+        ``GAMMA_NUM``) and high-fidelity (``ALPHA_HF``, ``GAMMA_HF``)
+        parameter sets from :class:`Config`.
+        """
         self.n = n_satellites
         self.track = track
         self.seed = seed
@@ -103,6 +118,12 @@ class ExperimentRunner:
         agent_idx: int = 0,
         seed: int | None = None,
     ) -> tuple[np.ndarray, int]:
+        """§5.4.1 single-fault profile: agent ``agent_idx`` decays at rate ``eta``.
+
+        Returns ``(health, onset_time)`` where ``health`` has shape
+        ``(n, n_steps)``. Used by every comparative / ablation /
+        topology / scenario-2 study.
+        """
         return actuator_degradation_profile(
             self.n,
             n_steps,
@@ -120,6 +141,7 @@ class ExperimentRunner:
         onset_time: int = 80,
         seed: int | None = None,
     ) -> tuple[np.ndarray, int]:
+        """§5.5.2 two-fault profile: agent 0 fast decay, agent 1 slow decay."""
         del seed  # concurrent profile is deterministic given onset_time
         return concurrent_degradation_profile(
             self.n,
@@ -158,7 +180,7 @@ class ExperimentRunner:
         iso_mask: np.ndarray | None = None,
         use_w_adaptation: bool = True,
         w_base_per_interval: list[np.ndarray] | None = None,
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         """Single entry point for every engine-driven method.
 
         ``override`` (shape ``(n, n_steps)``) lets the caller bypass the
@@ -193,7 +215,14 @@ class ExperimentRunner:
         *,
         use_w_adaptation: bool = True,
         w_base_per_interval: list[np.ndarray] | None = None,
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
+        """Proposed method: RPSGM + RPSR + OPT + Sinkhorn-adapted DIGing.
+
+        This is the full §3-§4 pipeline. ``use_w_adaptation`` is
+        exposed so the §5.3 "no Sinkhorn" ablation can flip it off
+        without re-implementing the closed loop; ``w_base_per_interval``
+        lets §5.4.2 inject a time-varying communication graph.
+        """
         return self._run_engine_method(
             health_profile, seed,
             use_w_adaptation=use_w_adaptation,
@@ -202,7 +231,8 @@ class ExperimentRunner:
 
     def run_oracle(
         self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
+        """Oracle baseline: closed loop driven by ground-truth health."""
         # Override = ground truth; engine bypasses RPS.
         return self._run_engine_method(
             health_profile, seed, override=health_profile, use_w_adaptation=True
@@ -210,7 +240,8 @@ class ExperimentRunner:
 
     def run_robust_do(
         self, health_profile: np.ndarray, seed: int, *, margin: float = 0.3
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
+        """§5.1.2 Robust DO: uniform conservative health (1 - margin), no W adaptation."""
         # Robust DO: every agent uses a uniform conservative health, no W
         # adaptation.
         n_steps = health_profile.shape[1]
@@ -227,7 +258,8 @@ class ExperimentRunner:
 
     def run_fdi(
         self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
+        """§5.1.2 FDI-Reconf: residual-energy threshold isolation + reconfiguration."""
         # Per §5.1.2: residual-energy threshold isolates degraded agents
         # and the engine pins their iterate to the formation reference.
         iso_mask, override = self._compute_fdi_isolation(health_profile, seed)
@@ -243,7 +275,7 @@ class ExperimentRunner:
 
     def run_ds_fusion(
         self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         """§5.4 D-S baseline: Dempster combine + threshold-based reconfiguration.
 
         Per Section 5.1.2, D-S "applies threshold-based reconfiguration
@@ -272,7 +304,7 @@ class ExperimentRunner:
     # --- ablation variants ------------------------------------------
     def _run_ds_closed_loop(
         self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         """§5.3 Variant A: closed loop + D-S fusion in place of RPSR."""
         override = self._build_ds_inline_profile(health_profile, seed)
         return self._run_engine_method(
@@ -281,7 +313,7 @@ class ExperimentRunner:
 
     def _run_average_fusion(
         self, profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         """§5.3 Variant B: equal-weight averaging instead of RPSR fusion.
 
         Local PMFs are produced by exactly the same RPSGM the proposed
@@ -323,20 +355,46 @@ class ExperimentRunner:
 
     def _run_without_sinkhorn(
         self, profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         return self.run_proposed(profile, seed, use_w_adaptation=False)
 
     def _run_binary_health(
         self, profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
-        binary_profile = (profile > 0.5).astype(float)
+    ) -> tuple[MetricDict, EngineLog]:
+        """§5.3 Variant D: binarise the *diagnostic output*, not the truth.
+
+        The paper's Variant D asks "what if the structural-adaptation
+        layer only sees a hard healthy/faulty label per agent rather
+        than a continuous severity?". To answer that we run the
+        proposed diagnostic to collect its per-tick ``h_hat``, then
+        threshold it at 0.5 and feed the resulting binary profile
+        back through the engine as an override.
+
+        An earlier version of this method discretised ``profile``
+        (the ground-truth health) directly. That measures a
+        different question -- "what if the diagnostic were perfect
+        but quantised?" -- and overstates Variant D's headline by
+        leaking ground truth into a baseline that, by construction,
+        is supposed to lose information.
+        """
+        # First pass: run the proposed pipeline to get diagnostic estimates.
+        _, log = self.run_proposed(profile, seed)
+        # Build a per-tick binary profile from the diagnostic output.
+        n_steps = profile.shape[1]
+        steps_per_diag = max(1, n_steps // self._N_DIAG_INTERVALS)
+        binary_profile = np.ones((self.n, n_steps))
+        for k, h_hat in enumerate(log.health_est):
+            diag_start = log.diag_steps[k]
+            diag_end = min(n_steps, diag_start + steps_per_diag)
+            binarised = (h_hat > 0.5).astype(float)
+            binary_profile[:, diag_start:diag_end] = binarised[:, None]
         return self._run_engine_method(
-            profile, seed, override=binary_profile, use_w_adaptation=True
+            profile, seed, override=binary_profile, use_w_adaptation=True,
         )
 
     def _run_no_adaptation(
         self, profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         n_steps = profile.shape[1]
         ones = _broadcast_health_profile(np.ones(self.n), n_steps)
         return self._run_engine_method(
@@ -460,7 +518,7 @@ class ExperimentRunner:
     # --- Byzantine: kept separate because it does not use DIGing -------
     def run_byzantine(
         self, health_profile: np.ndarray, seed: int
-    ) -> tuple[dict, EngineLog]:
+    ) -> tuple[MetricDict, EngineLog]:
         """Trimmed-mean aggregation; replaces DIGing's row-stochastic mix
         with a coordinate-wise trimmed mean across agent estimates.
 
@@ -554,7 +612,16 @@ class ExperimentRunner:
         self,
         log: EngineLog,
         health_profile: np.ndarray,
-    ) -> dict:
+    ) -> MetricDict:
+        """Per-method metrics computed from a closed-loop log.
+
+        Cost-layer metrics (global cost, constraint rate, utilisation
+        coordinate) are evaluated on the DIGing solution
+        ``log.optimiser_targets[-1]`` rather than the simulator's
+        last-tick positions. Under partial actuator health the sim may
+        still be tracking toward the target; using ``log.positions``
+        would conflate optimiser quality with controller bandwidth.
+        """
         if not log.positions:
             return {
                 "global_cost": float("nan"),
@@ -609,7 +676,8 @@ class ExperimentRunner:
         n_runs: int = Config.N_RUNS,
         n_steps: int = 500,
         eta: float = Config.ETA_SINGLE,
-    ) -> dict[str, dict]:
+    ) -> StudyResult:
+        """§5.4.1 comparative study: Proposed + 5 baselines on single-fault profile."""
         methods: dict[str, MethodFn] = {
             "Proposed": self.run_proposed,
             "Robust DO": self.run_robust_do,
@@ -619,12 +687,12 @@ class ExperimentRunner:
             "Oracle": self.run_oracle,
         }
 
-        results: dict[str, list[dict]] = {name: [] for name in methods}
+        results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
             profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
 
-            method_runs: dict[str, tuple[dict, EngineLog]] = {}
+            method_runs: dict[str, tuple[MetricDict, EngineLog]] = {}
             for name, fn in methods.items():
                 m, log = fn(profile, seed)
                 method_runs[name] = (m, log)
@@ -730,7 +798,8 @@ class ExperimentRunner:
         n_runs: int = Config.N_RUNS,
         n_steps: int = 500,
         eta: float = Config.ETA_SINGLE,
-    ) -> dict[str, dict]:
+    ) -> StudyResult:
+        """§5.3 ablation: Full + Variants A-E on the §5.4.1 single-fault profile."""
         variants: dict[str, MethodFn] = {
             "Full framework": self.run_proposed,
             "Variant A (D-S)": self._run_ds_closed_loop,
@@ -740,7 +809,7 @@ class ExperimentRunner:
             "Variant E (no adapt)": self._run_no_adaptation,
         }
 
-        results: dict[str, list[dict]] = {name: [] for name in variants}
+        results: dict[str, list[MetricDict]] = {name: [] for name in variants}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
             profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
@@ -763,7 +832,7 @@ class ExperimentRunner:
         n_runs: int = Config.N_RUNS,
         n_steps: int = 500,
         eta: float = Config.ETA_SINGLE,
-    ) -> dict[str, dict]:
+    ) -> StudyResult:
         """§5.4.2: two specific edges undergo sinusoidal packet loss."""
         # pick two non-trivial edges that actually exist in the topology
         n = self.n
@@ -784,7 +853,7 @@ class ExperimentRunner:
             "FDI-Reconf": self.run_fdi,
             "Oracle": self.run_oracle,
         }
-        results: dict[str, list[dict]] = {name: [] for name in methods}
+        results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
             profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
@@ -798,10 +867,11 @@ class ExperimentRunner:
         self,
         n_runs: int = 5,
         n_steps: int = 500,
-        max_removals: int = 4,
-    ) -> dict[str, dict]:
+        n_removals: int = 4,
+    ) -> StudyResult:
+        """§5.5.1: progressive edge removal under three modes (random / high-weight / adjacent)."""
         modes = ["random", "high_weight", "adjacent"]
-        results: dict[str, list[dict]] = {m: [] for m in modes}
+        results: dict[str, list[MetricDict]] = {m: [] for m in modes}
         for mode in modes:
             for run_idx in range(n_runs):
                 seed = self.seed + run_idx * 1009
@@ -810,7 +880,7 @@ class ExperimentRunner:
                     self.W,
                     n_intervals=10,
                     mode=mode,
-                    n_removals=max_removals,
+                    n_removals=n_removals,
                     rng=np.random.default_rng(seed),
                 )
                 m_dict, _ = self.run_proposed(
@@ -824,7 +894,8 @@ class ExperimentRunner:
         self,
         n_runs: int = Config.N_RUNS,
         n_steps: int = 500,
-    ) -> dict[str, dict]:
+    ) -> StudyResult:
+        """§5.5.2: two simultaneous faults at different decay rates."""
         # §5.5.2 of the paper traces the Proposed framework's health
         # estimate against ground truth in the two-fault regime; the
         # study does not include a horizontal D-S/Oracle comparison
@@ -833,7 +904,7 @@ class ExperimentRunner:
         methods = {
             "Proposed": self.run_proposed,
         }
-        results: dict[str, list[dict]] = {name: [] for name in methods}
+        results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
             profile, _ = self.concurrent_degradation_profile(n_steps, seed=seed)
@@ -848,13 +919,14 @@ class ExperimentRunner:
         sizes: list[int] | None = None,
         n_steps: int = 200,
         n_runs: int = 3,
-    ) -> dict[int, dict]:
+    ) -> dict[int, SummaryDict]:
+        """§5.5.3: wall-time vs N for the Proposed framework."""
         if sizes is None:
             sizes = [5, 10, 20, 30]
-        results: dict[int, dict] = {}
+        results: dict[int, SummaryDict] = {}
         for size in sizes:
             sub = ExperimentRunner(n_satellites=size, seed=0)
-            metric_runs: list[dict] = []
+            metric_runs: list[MetricDict] = []
             for run_idx in range(n_runs):
                 seed = run_idx * 1009
                 profile, _ = sub.degradation_profile(n_steps, seed=seed)
@@ -874,8 +946,10 @@ class ExperimentRunner:
 
     # -------------------------------------------------------- bookkeeping
     @staticmethod
-    def _summarise_runs(results: dict[str, list[dict]]) -> dict[str, dict]:
-        out: dict[str, dict] = {}
+    def _summarise_runs(
+        results: dict[str, list[MetricDict]],
+    ) -> StudyResult:
+        out: StudyResult = {}
         for name, runs in results.items():
             keys = runs[0].keys() if runs else []
             summary: dict[str, Any] = {}
@@ -894,18 +968,18 @@ class ExperimentRunner:
             out[name] = summary
         return out
 
-    def print_results_table(self, results: dict, title: str = "Results") -> None:
+    def print_results_table(
+        self, results: StudyResult, title: str = "Results",
+    ) -> None:
+        """Pretty-print a study's mean ± std table to stdout."""
         print(f"\n{'=' * 80}\n {title}\n{'=' * 80}")
         for method, metrics in results.items():
             print(f"\n{method}:")
-            if not isinstance(metrics, dict):
-                print(f"  {metrics}")
-                continue
             for key, value in metrics.items():
-                if isinstance(value, tuple) and len(value) == 2:
-                    print(f"  {key}: {value[0]:.4f} ± {value[1]:.4f}")
-                else:
-                    print(f"  {key}: {value}")
+                # Every value in StudyResult is a (mean, std) tuple by
+                # construction (``_summarise_runs``); the type system
+                # enforces this so we can render directly.
+                print(f"  {key}: {value[0]:.4f} ± {value[1]:.4f}")
 
 
 __all__ = ["ExperimentRunner"]

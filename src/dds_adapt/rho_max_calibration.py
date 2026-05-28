@@ -21,6 +21,13 @@ This module:
 5. Reports the ratio rho_star / rho_max_theoretical so the paper's
    "approx 20% margin" claim has a code-derived number.
 
+Note on the margin gap: the theoretical bound here uses a conservative
+prior for ``C`` (sqrt(N) * L_h / (mu * (1 - sigma^M))) with ``sigma^M = 0.9``,
+which produces a ~25000% margin rather than the paper's ~20%. Closing
+that gap requires aligning the prior with the proof's specific
+contraction estimate; we do not back-fit it, and the gap is recorded
+in ``KNOWN_DISCREPANCIES.md``.
+
 The calibration is reproducible: given a fixed seed and the default
 sweep, ``calibrate_rho_max`` returns deterministic floats.
 """
@@ -121,6 +128,12 @@ def calibrate_rho_max(
     div_indices = np.where(diverged)[0]
     if div_indices.size > 0:
         first_div = int(div_indices[0])
+        # ``baseline = errors[0]`` and ``threshold = 1.5 * baseline``;
+        # ``errors[0] > threshold`` is impossible, so ``first_div``
+        # cannot be 0. We still guard the boundary explicitly so the
+        # caller cannot silently pick up a stale rho_factors[-1] if the
+        # baseline run produced a NaN error and the comparison rules
+        # change in the future.
         if first_div == 0:
             rho_star_factor = float(rho_factors[0])
         else:

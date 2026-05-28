@@ -35,9 +35,15 @@ class BaselineRobustDO:
     The paper describes the baseline as treating degradation as bounded
     disturbance through a uniform conservative weight (``1 - margin``) on
     every agent's cost contribution, rather than estimating health.
-    The runner builds the conservative-health vector inline; the class
-    only owns the configuration and a ``DIGingOptimizer`` instance for
-    callers that want to drive it directly.
+
+    In this codebase ``ExperimentRunner.run_robust_do`` does not actually
+    instantiate this class: it builds the conservative-health vector
+    inline and feeds it as an override to the shared engine, so every
+    method shares the same logging surface. ``BaselineRobustDO`` is
+    kept as a configuration-only entry point for callers who want to
+    drive a Robust-DO problem outside the comparative-table loop;
+    ``self.optimizer`` is the ``DIGingOptimizer`` they would feed
+    gradients to.
     """
 
     def __init__(
@@ -87,9 +93,22 @@ class BaselineFDIReconf:
         self.isolated = np.zeros(n_agents, dtype=bool)
 
     def detect(self, residual_energy: np.ndarray) -> np.ndarray:
-        """Mark agents whose residual energy exceeds the threshold."""
+        """Mark agents whose residual energy exceeds the threshold.
+
+        Isolation is *monotone*: once flagged, an agent stays flagged
+        even if its residual energy later returns below threshold.
+        This matches the paper's "FDI commits and reconfigures" semantics
+        for the §5.4.1 single-fault scenario, but means a single
+        ``BaselineFDIReconf`` instance carries state across runs.
+        Build a fresh instance per trajectory if you want detection
+        to start from a clean slate.
+        """
         self.isolated |= residual_energy > self.residual_threshold
         return self.isolated.copy()
+
+    def reset(self) -> None:
+        """Clear the isolation latch (use between independent trajectories)."""
+        self.isolated[:] = False
 
 
 # -------------------------------------------------------------- Byzantine

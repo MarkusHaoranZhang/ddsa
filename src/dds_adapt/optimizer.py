@@ -36,6 +36,7 @@ class DIGingOptimizer:
         alpha: float = Config.ALPHA_NUM,
         rng: np.random.Generator | None = None,
     ) -> None:
+        """Initialise per-agent state matrices and cache the mixing matrix ``W``."""
         self.n = n_agents
         self.dim = dim
         self.W = W
@@ -43,6 +44,10 @@ class DIGingOptimizer:
         self._rng = rng if rng is not None else np.random.default_rng()
 
         # x[i] is agent i's estimate of the full (n_agents, dim) state.
+        # 0.05 = ~5% of the unit formation radius: small enough for
+        # the optimiser to converge inside _ITERS_PER_DIAG iterations
+        # without the initial spread dominating the early-step error
+        # (which biases the convergence-rate sweep in §5.2.1).
         self.x = self._rng.standard_normal((n_agents, n_agents, dim)) * 0.05
         self.y = np.zeros((n_agents, n_agents, dim))
         self.grad_prev = np.zeros((n_agents, n_agents, dim))
@@ -84,6 +89,12 @@ class DIGingOptimizer:
             mean = x.mean(axis=0)
             err = float(np.linalg.norm(x - mean))
             history.append(err)
+            # Skip the early-iteration warm-up before honouring the
+            # tolerance: gradient tracking needs ~10 steps to bring
+            # ``y`` close to the average gradient, and consensus error
+            # can be transiently small in that window for the wrong
+            # reason (initial randomness still dominates over the
+            # control direction).
             if k > 10 and err < tol:
                 break
         return self.x, history
@@ -97,6 +108,7 @@ class DIGingOptimizer:
         return self.x.mean(axis=0)
 
     def reset(self) -> None:
+        """Re-randomise per-agent state and zero the gradient-tracking buffers."""
         self.x = self._rng.standard_normal((self.n, self.n, self.dim)) * 0.05
         self.y = np.zeros((self.n, self.n, self.dim))
         self.grad_prev = np.zeros((self.n, self.n, self.dim))

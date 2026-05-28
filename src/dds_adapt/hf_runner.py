@@ -111,7 +111,15 @@ def run_hf_diagnostic_experiment(
     onset_step: int = 50,
     seed: int = 0,
 ) -> HFResult:
-    """Trace the diagnostic estimate through one high-fidelity degradation run."""
+    """Trace the diagnostic estimate through one high-fidelity degradation run.
+
+    The relative detection rule below assumes ``onset_step`` is large
+    enough that the first diagnosis tick falls inside the healthy phase
+    (specifically: ``onset_step >= Config.DELTA_T_HF`` so the t=0 tick
+    is unambiguously fault-free). Callers that want an onset before
+    the first diagnosis tick should pass an explicit healthy baseline
+    instead of relying on the t=0 estimate.
+    """
     healthy, faulty = train_gdm_hf(n_agents=n_agents, n_samples=200, seed=seed)
     diag = RPSDiagnosticModule(n_agents=n_agents)
     diag.fit(healthy, faulty)

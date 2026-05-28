@@ -30,9 +30,16 @@ The list below is the planned content of the first release (`v0.1.0`).
   + every figure with a single command.
 * `scripts/make_figures.py`: 13 vector PDFs covering the paper's
   figures plus a high-fidelity diagnostic plot.
-* 32 pytest tests: per-module unit tests, closed-loop integration,
-  and a bit-pinned numerical-signature regression for the comparative
-  study (rtol=1e-9 on every metric except wall_time).
+* 57 pytest tests: per-module unit tests, closed-loop integration,
+  CLI dispatch coverage, scenario-builder boundary tests, and
+  ordering-inequality regression tests for the §5.4.1 comparative
+  study and §5.3 ablation (Oracle ≥ Proposed > all binary baselines;
+  Full > Variant A; Variant E ≈ 0). Line coverage is 93% overall;
+  uncovered surface is concentrated in `learning_baseline.py`
+  (sklearn-only path, exercised by `reproduce.py` not pytest).
+* `mypy --strict` clean across all 18 source files (the only
+  disabled check is `no-any-return`, an artefact of numpy's
+  partial generic stubs rather than a project-side issue).
 * GitHub Actions CI (`.github/workflows/ci.yml`) running ruff +
   mypy + pytest + a `reproduce.py --quick` end-to-end smoke on
   Ubuntu and Windows for Python 3.10 / 3.12.

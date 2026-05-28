@@ -23,7 +23,7 @@ Closed-Loop Architecture for Resilient Distributed Optimization*
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev,learning,plot]
-pytest                                       :: 32 tests, ~10 s
+pytest                                       :: 57 tests, ~30 s
 ruff check .                                 :: lint
 mypy src/dds_adapt                           :: type-check
 python scripts/reproduce.py --quick --seed 0 :: < 1 minute, smoke run
@@ -49,7 +49,7 @@ different cost-band denominator; see [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANC
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
 | Oracle      | 1.00        | 0.00       | 1.00      | ~25             |
-| Proposed    | ~0.47       | 0.07       | ~0.59     | 0               |
+| Proposed    | ~0.71       | 0.06       | ~0.50     | 0               |
 | Robust DO   | ~0.00       | —          | —         | 0               |
 | FDI-Reconf  | ~0.00       | —          | —         | ~225            |
 | D-S Fusion  | ~0.00       | —          | —         | ~243            |
@@ -63,8 +63,11 @@ continuous health.
 
 | Variant                 | Utilisation | Health MAE | Kendall τ   |
 |-------------------------|-------------|------------|-------------|
-| Full framework          | ~0.47       | 0.07       | 0.59        |
+| Full framework          | ~0.71       | 0.06       | 0.50        |
 | Variant A (D-S in loop) | ~0.00       | 0.17       | 0.50        |
+| Variant B (Average)     | ~0.47       | 0.07       | 0.50        |
+| Variant C (No Sinkhorn) | ~0.71       | 0.06       | 0.50        |
+| Variant D (binary)      | ~0.03       | 0.06       | 1.00        |
 | Variant E (no adapt)    | ~0.00       | 0.06       | —           |
 
 The full table (six variants and per-metric standard deviation) is in
@@ -201,7 +204,7 @@ the JSON files alongside it.
 ## Tests
 
 ```cmd
-pytest          :: 32 tests covering every module, the closed loop, and a bit-pinned regression of the comparative study
+pytest          :: 57 tests covering every module, the closed loop, the CLI, scenario boundaries, and ordering-inequality regression of the comparative + ablation studies
 ruff check .    :: lint
 mypy src/dds_adapt :: type-check
 ```

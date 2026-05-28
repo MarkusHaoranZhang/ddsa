@@ -24,6 +24,7 @@ class SatelliteFormationSimulator:
         formation_radius: float = 1.0,
         seed: int | None = None,
     ) -> None:
+        """Initialise ``n_satellites`` agents on a circular reference at ``formation_radius``."""
         self.n = n_satellites
         self.dt = dt
         self.formation_radius = formation_radius
@@ -46,7 +47,9 @@ class SatelliteFormationSimulator:
         for i in range(n_satellites):
             self.state[i, 0:2] = self.desired_positions[i] + rng.normal(0, 0.05, 2)
 
-        # double-integrator pseudo-LQR gains
+        # double-integrator pseudo-LQR gains. K_pos / K_vel = 0.5 so the
+        # inner control loop is critically damped (zero overshoot) at
+        # the omega_n = sqrt(K_pos) ~ 0.7 rad/s set by the simulator dt.
         self.K_pos = 0.5
         self.K_vel = 1.0
 
@@ -74,7 +77,12 @@ class SatelliteFormationSimulator:
         simulator's running state is left untouched.
         """
         state_backup = self.state.copy()
-        # probe perturbation: offset = 0.5 m along +x, velocity = 0.5 m/s along +x
+        # probe perturbation: offset = 0.5 m along +x, velocity = 0.5 m/s along +x.
+        # Magnitudes are chosen ~half the formation radius (1.0 m by
+        # default) so the LQR command at the probe state is non-trivial
+        # but well below the 2.0 m formation-tolerance scale used by
+        # metrics.compute_metrics. Halving these would shrink the
+        # diagnostic SNR by 2x and bias the GDM toward "always healthy".
         self.state[:, :2] = self.desired_positions + np.array([0.5, 0.0])
         self.state[:, 2:] = np.array([0.5, 0.0])
         cmd = self.commanded_control(self.desired_positions)
@@ -134,7 +142,9 @@ class SatelliteFormationSimulator:
 
     # ---- Helpers ------------------------------------------------------
     def get_state(self) -> np.ndarray:
+        """Copy of the full ``[x, y, vx, vy]`` state for every agent."""
         return self.state.copy()
 
     def get_positions(self) -> np.ndarray:
+        """Copy of the position component of every agent's state."""
         return self.state[:, :2].copy()

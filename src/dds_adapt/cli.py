@@ -37,6 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """``dds-run`` console entry point: dispatch a study by name."""
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -90,9 +91,10 @@ def main(argv: list[str] | None = None) -> None:
         print("=" * 80)
         for size, metrics in scale.items():
             print(f"\nN = {size}:")
+            # ``run_scalability`` returns ``dict[int, SummaryDict]``;
+            # every value is a (mean, std) tuple by construction.
             for k, v in metrics.items():
-                if isinstance(v, tuple):
-                    print(f"  {k}: {v[0]:.4f} ± {v[1]:.4f}")
+                print(f"  {k}: {v[0]:.4f} ± {v[1]:.4f}")
 
     if choice in ("learning", "all"):
         try:
@@ -106,6 +108,12 @@ def main(argv: list[str] | None = None) -> None:
 
     if choice in ("hf", "all"):
         from dds_adapt.hf_runner import run_hf_diagnostic_experiment
+        # The HF track has its own cadence (Config.DELTA_T_HF) and a
+        # 600-step default that the diagnostic baseline rule depends
+        # on. We do not forward --n-steps here so the published
+        # numbers stay reproducible regardless of CLI flags. Pass an
+        # explicit ``n_steps`` to ``run_hf_diagnostic_experiment`` if
+        # you need a shorter run.
         hf = run_hf_diagnostic_experiment(seed=args.seed)
         print("\n" + "=" * 80)
         print(" High-fidelity track (NASA 42 stand-in, 3 satellites GTO)")

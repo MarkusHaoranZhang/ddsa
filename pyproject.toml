@@ -56,11 +56,13 @@ addopts = "-q"
 [tool.mypy]
 python_version = "3.10"
 files = ["src/dds_adapt"]
-strict = false
-# We adopt a *gradual* mypy posture: warn loudly on the things that
-# matter (untyped function defs that escape, missing returns, dead code)
-# but do not require third-party stubs for numpy / scipy / matplotlib /
-# sklearn (we treat them as ``Any``-typed where stubs are missing).
+strict = true
+# numpy operations (mean, copy, clip, ...) return ``Any`` because numpy
+# does not yet ship full generic stubs that preserve dtype. Disabling
+# only ``no-any-return`` lets the rest of strict mode catch real bugs
+# (untyped defs, missing return annotations, unreachable code) while
+# avoiding cosmetic ``cast`` calls everywhere we return a numpy array.
+disable_error_code = ["no-any-return"]
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true

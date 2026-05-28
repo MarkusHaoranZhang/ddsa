@@ -11,6 +11,23 @@ Implements Section 4.2 of the paper:
 * OPT: ordered probability transformation, projecting the fused PMF onto a
   per-agent health estimate.
 
+Mapping to the paper's symbols
+------------------------------
+The paper expresses the per-configuration support as
+``s_A = -log D(R_i, E[r|A])`` where ``D`` is the energy distance between
+a residual window ``R_i`` and the expected residual under hypothesis
+``A``. This module realises the same support function via a Gaussian
+discriminant model: per-agent membership posteriors built from
+healthy / faulty likelihoods (``compute_memberships``) play the role of
+the residual-vs-expected agreement, and the per-position weighting
+inside ``generate_local_pmf`` realises the *sequential conditional
+weighting* the paper builds ``s_A`` from. The two formulations are
+interchangeable as scoring functions over the truncated permutation
+event space; the GDM form is what we ship because it factors the
+training cost into a one-shot ``fit`` call (see ``train_gdm`` in
+``residual.py``) instead of requiring an online ``E[r|A]`` predictor
+at run time.
+
 Compared to the original single-file reference, this version:
 
 * trains the GDM from explicit simulator samples (``train_gdm`` /
@@ -41,6 +58,7 @@ class RPSDiagnosticModule:
     """Random Permutation Set diagnostic block."""
 
     def __init__(self, n_agents: int, l_max: int = Config.L_MAX) -> None:
+        """Initialise an empty GDM (call ``fit`` before diagnosing)."""
         self.n = n_agents
         self.l_max = l_max
         # GDM parameters: one Gaussian for "agent j healthy" and one for
@@ -110,9 +128,27 @@ class RPSDiagnosticModule:
             self.std_f[:, j] = faulty_std_at_target
         self._fitted = True
 
+        # Reliability is a derived quantity of the fitted GDM (the
+        # smallest pairwise KL gap between the per-fault Gaussians of
+        # this observer); it does *not* depend on the live residual.
+        # Compute it once here so every downstream ``diagnose_round``
+        # call sees the same value, independent of how many times it
+        # has been invoked.
+        for i in range(self.n):
+            self.update_reliability(i)
+
     # ------------------------------ memberships & local PMF
     def compute_memberships(self, residual_vec: np.ndarray, agent_i: int) -> np.ndarray:
-        """Posterior P(faulty | residual_vec[j]) for every ``j``."""
+        """Posterior P(faulty | residual_vec[j]) for every ``j``.
+
+        Plays the role of the per-agent agreement score that the
+        paper's ``s_A = -log D(R_i, E[r|A])`` is built from: a high
+        membership for ``j`` means the residual that agent ``i``
+        observes about ``j`` agrees with the GDM's *faulty*
+        Gaussian, which is the GDM-side analogue of "the residual
+        window matches the expected pattern under a hypothesis that
+        includes ``j``".
+        """
         log_h = _gaussian_logpdf(
             residual_vec, self.mean_h[agent_i], self.std_h[agent_i]
         )
@@ -129,7 +165,20 @@ class RPSDiagnosticModule:
     def generate_local_pmf(
         self, agent_i: int, residual_vec: np.ndarray
     ) -> dict[tuple[int, ...], float]:
-        """Build a length-``l_max`` truncated PMF over PES from a residual."""
+        """Build a length-``l_max`` truncated PMF over PES from a residual.
+
+        This realises the sequential conditional weighting the paper
+        uses to construct ``s_A``: each focal element ``A`` of length
+        ``q`` accumulates a per-position support
+        ``s_iu = exp(-|membership[A[u]] - ordered_membership[u]|)``,
+        which scores the agreement between the membership of the
+        agent placed at position ``u`` and the ``u``-th largest
+        membership overall. The product across positions plays the
+        same role as the cumulative log-support in the paper's
+        formulation; the final ``support * ordered_norm[length - 1]``
+        weighting, together with the normalisation step below, is the
+        truncated softmax over PES that produces ``M_i^{(t)}(A)``.
+        """
         memberships = self.compute_memberships(residual_vec, agent_i)
         if memberships.sum() > 0:
             normed = memberships / memberships.sum()
@@ -272,7 +321,7 @@ class RPSDiagnosticModule:
         return np.clip(1.0 - deg_prob, 0.0, 1.0)
 
     # ---------------------------------------- online reliability update
-    def update_reliability(self, agent_i: int, residual_vec: np.ndarray) -> float:
+    def update_reliability(self, agent_i: int) -> float:
         """Update ``reliabilities[agent_i]`` from the GDM-based KL gap.
 
         Following Section 4.2: for every pair of fault hypotheses
@@ -282,12 +331,12 @@ class RPSDiagnosticModule:
         how distinguishable agent ``i``'s observations are. We squash
         this minimum gap through a sigmoid to land in ``[0, 1]``.
 
-        ``residual_vec`` is unused for the reliability score itself but
-        kept in the signature so callers can interleave reliability
-        updates with PMF generation.
+        The reliability is a *static* property of the fitted GDM: it
+        depends on how well-separated the per-fault Gaussians are
+        for this observer, not on the live residual. Recomputing it
+        per tick (as ``diagnose_round`` does) is cheap and keeps the
+        path open for a future GDM that updates online.
         """
-        del residual_vec  # GDM-side metric does not depend on the live residual
-
         # KL divergence between two univariate Gaussians N(mu1, sigma1) and
         # N(mu2, sigma2):
         #   KL = log(sigma2/sigma1) + (sigma1^2 + (mu1-mu2)^2)/(2 sigma2^2) - 1/2
@@ -329,15 +378,22 @@ class RPSDiagnosticModule:
     # ------------------------------------------------------- end-to-end
     def diagnose_round(
         self, residual_matrix: np.ndarray
-    ) -> tuple[np.ndarray, list[dict[tuple[int, ...], float]], dict]:
+    ) -> tuple[
+        np.ndarray,
+        list[dict[tuple[int, ...], float]],
+        dict[tuple[int, ...], float],
+    ]:
         """Run one full RPSGM + RPSR + OPT round.
 
         ``residual_matrix[i, j]`` is the residual energy that agent ``i``
         observes about agent ``j``.
+
+        Reliabilities are static after :meth:`fit`; we do not refresh
+        them here, so this loop is deterministic given the residual
+        matrix alone.
         """
         local_pmfs: list[dict[tuple[int, ...], float]] = []
         for i in range(self.n):
-            self.update_reliability(i, residual_matrix[i])
             local_pmfs.append(self.generate_local_pmf(i, residual_matrix[i]))
         fused = self.fuse_pmfs(local_pmfs)
         h_hat = self.extract_health_estimate(fused)

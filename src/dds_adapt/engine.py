@@ -100,8 +100,9 @@ def run_closed_loop(
 
     ``w_base_per_interval`` lets the caller swap the *base* communication
     graph at every diagnostic interval; this is what scenario 2 needs to
-    inject communication-link degradation. Length must be at least
-    ``n_diag_intervals``.
+    inject communication-link degradation. If the list is shorter than
+    ``n_diag_intervals`` the trailing intervals fall back to
+    ``W_base``.
 
     ``isolation_mask`` is a per-tick boolean ``(n_diag_intervals, n)``
     matrix; an agent flagged ``True`` at a given tick is treated as
@@ -200,6 +201,12 @@ def run_closed_loop(
             _iso: np.ndarray = iso_mask,
             _edges: list[tuple[int, int]] = active_edges,
         ) -> np.ndarray:
+            # Default-arg capture (``_h=h_hat`` etc.) binds the current
+            # tick's values at *closure-creation* time. This avoids the
+            # late-binding pitfall where the ``grad`` callable would
+            # otherwise see whatever ``h_hat`` is when DIGing finally
+            # invokes it (i.e. the next tick's value).
+            #
             # agent_idx-owned local cost gradient: own tracking + own
             # safe-anchor + edges (agent_idx, j) for j > agent_idx,
             # restricted to edges between two active agents.

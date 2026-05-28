@@ -13,6 +13,7 @@ runs without GPU drivers.
 from __future__ import annotations
 
 import warnings
+from typing import Any
 
 import numpy as np
 
@@ -69,8 +70,12 @@ def train_learning_baseline(
     n_train: int = 2000,
     eta_train: float = Config.ETA_SINGLE,
     seed: int = 0,
-):
-    """Train and return a fitted ``sklearn`` MLPRegressor."""
+) -> Any:
+    """Train and return a fitted ``sklearn`` MLPRegressor.
+
+    Returns ``Any`` because ``sklearn`` is an optional dependency and we
+    do not want to force its import at type-check time.
+    """
     try:
         from sklearn.neural_network import MLPRegressor
     except ImportError as exc:  # pragma: no cover - import guard
@@ -101,7 +106,7 @@ def evaluate_learning_baseline(
     eta_train: float = Config.ETA_SINGLE,
     eta_in_dist: float | None = None,
     eta_out_dist: float | None = None,
-) -> dict[str, dict]:
+) -> dict[str, dict[str, tuple[float, float]]]:
     """Train once and report MAE on in-distribution vs out-of-distribution traces."""
     if eta_in_dist is None:
         eta_in_dist = eta_train

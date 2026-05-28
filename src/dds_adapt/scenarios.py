@@ -91,9 +91,12 @@ def perturb_topology(
 
     ``mode`` is one of:
 
-    * ``"random"`` – uniformly random edge removal.
+    * ``"random"`` – uniformly random edge removal (consults ``rng``).
     * ``"high_weight"`` – remove the highest-weight edges first.
+      Deterministic by construction; ``rng`` is unused for this mode.
     * ``"adjacent"`` – remove edges incident to ``degraded_agent``.
+      Consults ``rng`` to break ties when multiple incident edges have
+      equal weight.
 
     ``n_removals`` edges are removed by the *last* interval, and the
     sequence linearly interpolates the cumulative count between

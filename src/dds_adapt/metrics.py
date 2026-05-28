@@ -27,7 +27,7 @@ def compute_metrics(
     beta: float = Config.BETA,
     gamma: float = Config.GAMMA_NUM,
     edges: list[tuple[int, int]] | None = None,
-) -> dict:
+) -> dict[str, float]:
     """Return the dictionary of task / diagnostic metrics.
 
     Utilisation is computed as a proximity-based proxy here; the runner
@@ -56,17 +56,25 @@ def compute_metrics(
                 - x_final[j, :2]
                 - (desired_positions[i] - desired_positions[j])
             )
+            # The 2.0 m tolerance is twice the unit formation radius
+            # (Config.SAFE_OFFSET-scale): a pair is "in formation" if
+            # its inter-agent error is below 2x the nominal spacing.
             if error <= 2.0:
                 constraints_satisfied += 1
     total_pairs = n_agents * (n_agents - 1) / 2
     constraint_rate = constraints_satisfied / total_pairs if total_pairs > 0 else 1.0
 
-    # Proximity-based utilisation (fallback; runner overrides for tables)
+    # Proximity-based utilisation (fallback only; the comparative /
+    # ablation tables in runner.run_comparative override this with a
+    # cost-band time-average per Section 5.4.1 of the paper).
     actual = 0.0
     denom = 0.0
     for i in range(n_agents):
         if true_health[i] < 1.0:
             err = float(np.linalg.norm(x_final[i, :2] - desired_positions[i]))
+            # Same 2.0 m scale as the constraint tolerance above: an
+            # agent at the reference scores 1.0, an agent 2 m away
+            # scores 0.0, linearly in between.
             proximity = max(0.0, 1.0 - err / 2.0)
             actual += true_health[i] * proximity
             denom += 1.0
