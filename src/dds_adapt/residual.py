@@ -92,7 +92,7 @@ def collect_residual_samples(
 def train_gdm(
     n_agents: int,
     n_samples: int = Config.N_TRAIN_SAMPLES,
-    fault_healths: tuple[float, ...] = (0.7, 0.5, 0.3, 0.1),
+    fault_healths: tuple[float, ...] = (0.5, 0.3, 0.1),
     cross_agent_noise_std: float = 0.005,
     seed: int = 0,
 ) -> tuple[np.ndarray, list[np.ndarray]]:
@@ -101,9 +101,17 @@ def train_gdm(
     The faulty block for agent ``j`` is collected over a *range* of
     fault-health values rather than a single hard-fault corner, so the
     GDM learns a faulty distribution that covers partial degradation.
-    This is what Section 4.2 means by "GDM parameters are estimated from
-    historical data": the history covers the full envelope, not a single
-    operating point.
+    Section 4.2 of the paper means by "GDM parameters are estimated
+    from historical data" precisely this: the historical envelope, not
+    a single operating point.
+
+    The default range starts at ``0.5`` (a 50% capability loss) rather
+    than ``0.7``: the latter sits close enough to the healthy
+    distribution that the resulting GDM produces healthy-time
+    posterior P(faulty|residual) of ~0.15 even on uncorrupted residuals,
+    which feeds spurious "agent slightly degraded" signals into the
+    closed loop and biases X* away from the true optimum during the
+    fault-free phase.
     """
     if not fault_healths:
         raise ValueError("fault_healths must contain at least one value")

@@ -68,11 +68,15 @@ def compute_metrics(
 
     true_severity = 1.0 - np.asarray(true_health, dtype=float)
     est_severity = 1.0 - np.asarray(health_estimate, dtype=float)
-    if np.unique(est_severity).size < 2 and np.unique(true_severity).size < 2:
-        kendall_tau = 1.0 if np.allclose(true_severity, est_severity) else 0.0
+    # Methods that do not estimate continuous health (FDI / Byzantine /
+    # binary D-S) emit a constant vector. Kendall τ on a constant
+    # ranking is undefined; report NaN so downstream summaries can
+    # render "—" rather than a misleading 0.
+    if np.unique(est_severity).size < 2 or np.unique(true_severity).size < 2:
+        kendall_tau = float("nan")
     else:
         tau, _ = stats.kendalltau(true_severity, est_severity)
-        kendall_tau = 0.0 if (tau is None or np.isnan(tau)) else float(tau)
+        kendall_tau = float("nan") if (tau is None or np.isnan(tau)) else float(tau)
 
     return {
         "global_cost": float(global_cost),

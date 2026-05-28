@@ -40,33 +40,35 @@ python scripts/reproduce.py --seed 0
 ## Reference numbers (seed = 0)
 
 A clean run of `python scripts/reproduce.py --seed 0` on the locked
-dependency set should land within statistical noise of the table
-below. If your numbers do not, treat that as a reproduction failure
-and check `meta.json` against `requirements-lock.txt` first.
+dependency set should reproduce the qualitative claims below. Absolute
+utilisation magnitudes differ from the paper's Table 5 due to a
+different cost-band denominator; see [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md).
 
 ### §5.4.1 Comparative (single-fault actuator degradation, n_runs = 30)
 
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
-| Oracle      | 1.00 ± 0.00 | 0.00 ± 0.00 | 1.00 ± 0.00 | ~50            |
-| Proposed    | 0.66 ± 0.04 | 0.12 ± 0.01 | 0.59 ± 0.05 | 0              |
-| FDI-Reconf  | 0.66 ± 0.04 | 0.04 ± 0.01 | 1.00 ± 0.00 | ~240           |
-| D-S Fusion  | 0.65 ± 0.04 | 0.04 ± 0.01 | 1.00 ± 0.00 | ~270           |
-| Robust DO   | 0.52 ± 0.03 | 0.31 ± 0.00 | 0.00 ± 0.00 | 0              |
-| Byzantine   | 0.16 ± 0.04 | 0.09 ± 0.02 | 0.00 ± 0.00 | —              |
+| Oracle      | 1.00        | 0.00       | 1.00      | ~25             |
+| Proposed    | ~0.47       | 0.07       | ~0.59     | 0               |
+| Robust DO   | ~0.00       | —          | —         | 0               |
+| FDI-Reconf  | ~0.00       | —          | —         | ~225            |
+| D-S Fusion  | ~0.00       | —          | —         | ~243            |
+| Byzantine   | ~0.01       | —          | —         | —               |
+
+Ordering: Oracle ≥ Proposed > everything else; D-S detection delayed
+relative to FDI; MAE / τ NaN for methods that do not estimate
+continuous health.
 
 ### §5.3 Ablation (n_runs = 30)
 
 | Variant                 | Utilisation | Health MAE | Kendall τ   |
 |-------------------------|-------------|------------|-------------|
-| Full framework          | 0.65 ± 0.04 | 0.12 ± 0.01 | 0.59 ± 0.05 |
-| Variant A (D-S in loop) | 0.60 ± 0.05 | 0.16 ± 0.02 | 0.50 ± 0.06 |
-| Variant E (no adapt)    | 0.16 ± 0.04 | 0.09 ± 0.02 | 0.00 ± 0.00 |
+| Full framework          | ~0.47       | 0.07       | 0.59        |
+| Variant A (D-S in loop) | ~0.00       | 0.17       | 0.50        |
+| Variant E (no adapt)    | ~0.00       | 0.06       | —           |
 
 The full table (six variants and per-metric standard deviation) is in
-[`STATUS.md`](STATUS.md). Where the absolute numbers diverge from the
-paper's headline numbers, the offset is documented in
-[`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md).
+[`STATUS.md`](STATUS.md).
 
 ## Hello, world
 

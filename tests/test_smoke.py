@@ -12,7 +12,11 @@ from dds_adapt.baselines import (
     BaselineRobustDO,
 )
 from dds_adapt.config import Config
-from dds_adapt.cost import formation_cost, formation_gradient
+from dds_adapt.cost import (
+    formation_cost,
+    formation_gradient,
+    local_cost_grad,
+)
 from dds_adapt.diagnostic import RPSDiagnosticModule
 from dds_adapt.engine import run_closed_loop
 from dds_adapt.metrics import compute_metrics
@@ -218,17 +222,19 @@ def test_cost_and_gradient_finite():
 
 # ----------------------------------------------------- optimizer
 def test_optimizer_runs_one_step():
-    np.random.seed(0)
     n = 4
     W = Config.get_communication_graph(n)
-    opt = DIGingOptimizer(n, dim=2, W=W, alpha=0.01)
-    desired = np.random.randn(n, 2)
+    opt = DIGingOptimizer(n, dim=2, W=W, alpha=0.01,
+                         rng=np.random.default_rng(0))
+    desired = np.array([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+    edges = Config.edges(n)
 
-    def grad(x_i, i, h_i):
-        return formation_gradient(x_i, i, h_i, desired)
+    def grad(X, i):
+        return local_cost_grad(X, i, np.ones(n), desired, edges,
+                               beta=Config.BETA, gamma=Config.GAMMA_NUM)
 
-    x = opt.step(grad, np.ones(n))
-    assert x.shape == (n, 2)
+    x = opt.step(grad)
+    assert x.shape == (n, n, 2)
 
 
 def test_optimizer_set_mixing_matrix_updates_W():

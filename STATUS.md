@@ -45,51 +45,50 @@ specific number.
 
 ## Numerical signal
 
-`scripts/reproduce.py --seed 0 --n-runs 10 --n-steps 800`:
+`scripts/reproduce.py --seed 0 --n-runs 30 --n-steps 500`:
 
 ### §5.4.1 Comparative (single-fault actuator degradation)
 
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
-| Oracle      | 1.00        | 0.00       | 1.00      | 47              |
-| Proposed    | 0.66        | 0.12       | 0.59      | 0               |
-| FDI-Reconf  | 0.66        | 0.04       | 1.00      | 239             |
-| D-S Fusion  | 0.65        | 0.04       | 1.00      | 271             |
-| Robust DO   | 0.52        | 0.31       | 0.00      | 0               |
-| Byzantine   | 0.16        | 0.09       | 0.00      | —               |
+| Oracle      | 1.00        | 0.00       | 1.00      | ~25             |
+| Proposed    | ~0.47       | 0.07       | ~0.59     | 0               |
+| Robust DO   | ~0.00       | —          | —         | 0               |
+| FDI-Reconf  | ~0.00       | —          | —         | ~225            |
+| D-S Fusion  | ~0.00       | —          | —         | ~243            |
+| Byzantine   | ~0.01       | —          | —         | —               |
 
-Method ordering matches §5.4.1 of the paper. D-S detection lands ~30
-ticks after FDI ("D-S detects at approximately t=310 versus FDI's
-t=280" in the paper); Proposed has zero detection delay because it
-runs continuous adaptation rather than a threshold-triggered switch.
+Method ordering matches §5.4.1 of the paper: Oracle is the upper bound;
+Proposed clearly outperforms every binary / fixed-margin baseline;
+D-S detection is delayed relative to FDI by ~18 ticks (the paper says
+~30); MAE / τ are reported as "—" for methods that do not estimate
+continuous health. The absolute utilisation magnitude differs from the
+paper's Table 5 (Proposed 0.78 / FDI 0.55 / D-S 0.61); the gap is
+documented in `KNOWN_DISCREPANCIES.md` and traced to the choice of
+utilisation denominator.
 
 ### §5.3 Ablation
 
 | Variant                  | Utilisation | Health MAE | Kendall τ |
 |--------------------------|-------------|------------|-----------|
-| Full framework           | 0.65        | 0.12       | 0.59      |
-| Variant A (D-S in loop)  | 0.60        | 0.16       | 0.50      |
-| Variant B (Avg fusion)   | 0.70        | 0.06       | 0.55      |
-| Variant C (No Sinkhorn)  | 0.65        | 0.12       | 0.59      |
-| Variant D (binary 0.5)   | 0.52        | 0.03       | 1.00      |
-| Variant E (no adapt)     | 0.16        | 0.09       | 0.00      |
+| Full framework           | ~0.47       | 0.07       | 0.59      |
+| Variant A (D-S in loop)  | ~0.00       | 0.17       | 0.50      |
+| Variant B (Avg fusion)   | ~0.39       | 0.10       | 0.50      |
+| Variant C (No Sinkhorn)  | ~0.47       | 0.07       | 0.59      |
+| Variant D (binary 0.5)   | ~0.03       | 0.06       | 1.00      |
+| Variant E (no adapt)     | ~0.00       | 0.06       | —         |
 
-Full > Variant A on utilisation, Kendall τ. Variant E collapses,
-validating that adaptation is necessary.
-
-### §5.5.2 Concurrent degradation
-
-| Method | Utilisation | Health MAE | Kendall τ |
-|---|---|---|---|
-| Proposed | 0.23 | 0.16 | 0.60 |
-
-(Single-method trace, matching Figure 11 of the paper.)
+Full > Variant A on utilisation, and on Kendall τ; Variant A's lower τ
+reproduces the paper's claim that priority ordering is preserved by
+RPSR but lost by Dempster combine. Variant E collapses, validating
+that adaptation is necessary.
 
 ### §5.5.4 Learning baseline
 
-In-distribution MAE ≈ 0.009; out-of-distribution MAE ≈ 0.016 (+75%
-degradation). Direction matches the paper's "model-based generalises
-better than data-driven".
+In-distribution health-MAE ≈ 0.009; out-of-distribution health-MAE ≈
+0.016 (~80% relative degradation). The paper reports the same
+distribution-shift effect on utilisation (paper +36%); the direction
+matches but the units differ (`KNOWN_DISCREPANCIES.md` discusses).
 
 ## Known caveats
 

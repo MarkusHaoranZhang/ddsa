@@ -31,7 +31,7 @@ from typing import Protocol
 import numpy as np
 
 from dds_adapt.config import Config
-from dds_adapt.cost import formation_grad_global
+from dds_adapt.cost import local_cost_grad
 from dds_adapt.diagnostic import RPSDiagnosticModule
 from dds_adapt.optimizer import DIGingOptimizer
 from dds_adapt.residual import broadcast_residual_matrix, residual_energy
@@ -175,36 +175,58 @@ def run_closed_loop(
         # ------------------ 4. distributed optimisation -----------------
         # If an isolation mask is supplied, agents flagged True at this
         # tick are physically removed from the formation: their iterate
-        # is pinned to the reference and their gradient is zeroed.
+        # is pinned to the reference, their gradient is zeroed, AND
+        # every formation-keeping edge incident to them is dropped.
+        # The dropped edges matter: without filtering, surviving
+        # neighbours still feel the coupling pull toward the isolated
+        # agent's reference position, which makes the FDI-Reconf
+        # solution numerically indistinguishable from "no adaptation"
+        # despite the very different physical interpretation.
         iso_mask = (
             isolation_mask[k] if isolation_mask is not None and k < len(isolation_mask)
             else np.zeros(n, dtype=bool)
         )
+        active_edges = (
+            [(a, b) for (a, b) in edges if not iso_mask[a] and not iso_mask[b]]
+            if iso_mask.any() else edges
+        )
 
         def grad(
             X: np.ndarray,
-            health: np.ndarray,
+            agent_idx: int,
+            _h: np.ndarray = h_hat,
             _iso: np.ndarray = iso_mask,
+            _edges: list[tuple[int, int]] = active_edges,
         ) -> np.ndarray:
-            g = formation_grad_global(
-                X, health, desired_positions, edges, beta=beta, gamma=gamma
+            # agent_idx-owned local cost gradient: own tracking + own
+            # safe-anchor + edges (agent_idx, j) for j > agent_idx,
+            # restricted to edges between two active agents.
+            g = local_cost_grad(
+                X, agent_idx, _h, desired_positions, _edges,
+                beta=beta, gamma=gamma,
             )
-            if _iso.any():
-                g[_iso] = 0.0
+            if _iso[agent_idx]:
+                # an isolated agent contributes no force
+                g[:] = 0.0
             return g
 
         if iso_mask.any():
-            optimiser.x[iso_mask] = desired_positions[iso_mask]
-        x_opt, hist = optimiser.optimize(
-            health=h_hat, n_iters=iters_per_diag, global_grad_func=grad
+            # pin every agent's *estimate* of the isolated rows to the reference
+            for iso_idx in np.where(iso_mask)[0]:
+                optimiser.x[:, iso_idx, :] = desired_positions[iso_idx]
+        x_per_agent, hist = optimiser.optimize(
+            grad, n_iters=iters_per_diag
         )
+        # consensus estimate of the whole formation
+        X_consensus = optimiser.consensus_estimate()
         if iso_mask.any():
-            x_opt = x_opt.copy()
-            x_opt[iso_mask] = desired_positions[iso_mask]
+            X_consensus = X_consensus.copy()
+            X_consensus[iso_mask] = desired_positions[iso_mask]
         wall = time.perf_counter() - t0
-        # Each agent steers toward its row of x_opt; consensus error is
-        # negligible after DIGing converges.
-        per_agent_target = x_opt
+        # Each agent steers toward its own row of the consensus formation;
+        # after DIGing converges the per-agent estimates agree closely so
+        # the steering target is essentially the global optimum X*.
+        per_agent_target = X_consensus
 
         # ------------------ 5. apply optimiser output to physics --------
         for inner in range(diag_start + 1, diag_end):

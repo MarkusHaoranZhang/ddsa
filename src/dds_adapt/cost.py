@@ -99,6 +99,50 @@ def formation_grad_global(
     return grad
 
 
+def local_cost_grad(
+    X: np.ndarray,
+    agent_idx: int,
+    health: np.ndarray,
+    desired_positions: np.ndarray,
+    edges: list[tuple[int, int]],
+    beta: float = Config.BETA,
+    gamma: float = Config.GAMMA_NUM,
+    safe_offset: float = Config.SAFE_OFFSET,
+) -> np.ndarray:
+    """Gradient ∇_X f_i(X) of agent ``i``'s local cost contribution.
+
+    The decomposition splits the global cost into agent-owned pieces:
+    agent ``i`` owns its own tracking + safe-anchor terms, and every
+    edge ``(a, b)`` with ``a < b`` is owned by its smaller endpoint.
+    Summing ``local_cost_grad`` over all agents reproduces
+    :func:`formation_grad_global` exactly, which is the standing
+    requirement of distributed optimisation.
+
+    The returned array has the same shape ``(N, 2)`` as the global
+    state ``X``, with non-zero entries only on the rows of agents
+    whose decision variables actually appear in ``f_i``.
+    """
+    n = len(desired_positions)
+    safe = _safe_anchor(desired_positions, safe_offset)
+    g = np.zeros_like(X)
+
+    # tracking + safe-anchor: agent i owns its own row only
+    g[agent_idx] += health[agent_idx] * (X[agent_idx] - desired_positions[agent_idx])
+    g[agent_idx] += (
+        (1.0 - health[agent_idx]) * gamma * (X[agent_idx] - safe[agent_idx])
+    )
+
+    # coupling: agent i owns every edge (i, j) with j > i
+    for a, b in edges:
+        if a == agent_idx and b > a:
+            d_ab = desired_positions[a] - desired_positions[b]
+            diff = X[a] - X[b] - d_ab
+            g[a] += beta * diff
+            g[b] -= beta * diff
+    del n
+    return g
+
+
 # ---------------- Backward-compatible per-agent helpers --------------
 def formation_cost(
     x_i: np.ndarray,

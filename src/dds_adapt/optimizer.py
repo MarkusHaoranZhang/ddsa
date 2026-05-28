@@ -1,4 +1,20 @@
-"""DIGing distributed optimiser."""
+"""DIGing distributed optimiser.
+
+Each agent maintains a full ``(N, dim)`` estimate of the global decision
+variable -- the "formation state" in our application -- and consensus
+on the *agent axis* (axis 0) drives all agents toward the same
+estimate. This is the standard DIGing setup of Nedic, Olshevsky, Shi
+(2017), where the local cost ``f_i: R^{Nd} -> R`` is a function of the
+*entire* decision vector, not just agent ``i``'s row.
+
+A common pitfall is to give each agent only its own row in ``R^d`` and
+mix those rows by ``W``. That degenerates into "average the rows"
+rather than "agree on the joint optimiser", and for any cost with
+inter-agent coupling (such as a formation-keeping penalty) it
+collapses to a meaningless point. We avoid that pitfall here: ``self.x``
+has shape ``(n_agents, n_agents, dim)`` and ``W @ x`` only acts on
+axis 0.
+"""
 
 from __future__ import annotations
 
@@ -26,70 +42,66 @@ class DIGingOptimizer:
         self.alpha = alpha
         self._rng = rng if rng is not None else np.random.default_rng()
 
-        self.x = self._rng.standard_normal((n_agents, dim)) * 0.1
-        self.y = np.zeros((n_agents, dim))
-        self.grad_prev = np.zeros((n_agents, dim))
+        # x[i] is agent i's estimate of the full (n_agents, dim) state.
+        self.x = self._rng.standard_normal((n_agents, n_agents, dim)) * 0.05
+        self.y = np.zeros((n_agents, n_agents, dim))
+        self.grad_prev = np.zeros((n_agents, n_agents, dim))
 
     def step(
         self,
-        grad_func: Callable[[np.ndarray, int, float], np.ndarray] | None = None,
+        local_grad_func: Callable[[np.ndarray, int], np.ndarray],
         health: np.ndarray | None = None,
-        *,
-        global_grad_func: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
     ) -> np.ndarray:
         """One DIGing update.
 
-        Either ``grad_func`` (per-agent, signature ``(x_i, i, h_i)``) or
-        ``global_grad_func`` (signature ``(X, health) -> (N, dim)``) must
-        be supplied. The global form lets the cost include inter-agent
-        coupling such as the formation-keeping penalty in Section 5.1.1
-        of the paper, which the per-agent form cannot express.
+        ``local_grad_func(X, i)`` returns ``∇_X f_i(X)`` where ``X`` is
+        the *full* ``(n_agents, dim)`` formation state seen from agent
+        ``i``. Each agent applies this gradient against its own copy
+        ``self.x[i]``.
         """
-        if health is None:
-            health = np.ones(self.n)
-        if global_grad_func is None and grad_func is None:
-            raise ValueError("supply either grad_func or global_grad_func")
+        del health  # forwarded into local_grad_func by the caller via closure
+        # gather gradients: g[i] = ∇ f_i(self.x[i])
+        grad_curr = np.stack(
+            [local_grad_func(self.x[i], i) for i in range(self.n)], axis=0
+        )
 
-        if global_grad_func is not None:
-            grad_curr = global_grad_func(self.x, health)
-        else:
-            assert grad_func is not None  # narrowed by the raise above
-            grad_curr = np.zeros_like(self.x)
-            for i in range(self.n):
-                grad_curr[i] = grad_func(self.x[i], i, health[i])
-
-        self.y = self.W @ self.y + grad_curr - self.grad_prev
+        # gradient tracking: y_{i}^{k+1} = sum_j W_{ij} y_j + g_i^{k+1} - g_i^{k}
+        self.y = np.einsum("ij,jkl->ikl", self.W, self.y) + grad_curr - self.grad_prev
         self.grad_prev = grad_curr.copy()
-        self.x = self.W @ self.x - self.alpha * self.y
+        # primal: x_{i}^{k+1} = sum_j W_{ij} x_j - alpha * y_i
+        self.x = np.einsum("ij,jkl->ikl", self.W, self.x) - self.alpha * self.y
         return self.x.copy()
 
     def optimize(
         self,
-        grad_func: Callable[[np.ndarray, int, float], np.ndarray] | None = None,
-        health: np.ndarray | None = None,
+        local_grad_func: Callable[[np.ndarray, int], np.ndarray],
         n_iters: int = 50,
         tol: float = 1e-6,
-        *,
-        global_grad_func: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
     ) -> tuple[np.ndarray, list[float]]:
         """Run up to ``n_iters`` DIGing steps; stop on consensus."""
-        if health is None:
-            health = np.ones(self.n)
         history: list[float] = []
         for k in range(n_iters):
-            x = self.step(
-                grad_func, health, global_grad_func=global_grad_func
-            )
-            consensus_error = float(np.linalg.norm(x - x.mean(axis=0)))
-            history.append(consensus_error)
-            if k > 10 and consensus_error < tol:
+            x = self.step(local_grad_func)
+            # consensus error: spread of agent estimates around their mean
+            mean = x.mean(axis=0)
+            err = float(np.linalg.norm(x - mean))
+            history.append(err)
+            if k > 10 and err < tol:
                 break
         return self.x, history
 
+    def consensus_estimate(self) -> np.ndarray:
+        """Average the per-agent estimates into a single ``(n_agents, dim)`` state.
+
+        After DIGing has converged the spread across agents is
+        negligible; we return the mean as a robust scalar summary.
+        """
+        return self.x.mean(axis=0)
+
     def reset(self) -> None:
-        self.x = self._rng.standard_normal((self.n, self.dim)) * 0.1
-        self.y = np.zeros((self.n, self.dim))
-        self.grad_prev = np.zeros((self.n, self.dim))
+        self.x = self._rng.standard_normal((self.n, self.n, self.dim)) * 0.05
+        self.y = np.zeros((self.n, self.n, self.dim))
+        self.grad_prev = np.zeros((self.n, self.n, self.dim))
 
     def set_mixing_matrix(self, W: np.ndarray) -> None:
         """Swap in a new mixing matrix mid-run (Section 4.2 adaptation)."""
