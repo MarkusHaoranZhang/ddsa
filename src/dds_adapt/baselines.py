@@ -7,7 +7,11 @@ paper:
 * FDI-Reconf    - "why not detect-and-isolate above a threshold?"
 * Byzantine     - "do existing adversarial-aggregation rules cope?"
 * D-S Fusion    - "is RPS strictly better than Dempster-Shafer combination?"
-* Oracle        - upper bound when health is perfectly known.
+
+The Oracle baseline (perfect health knowledge) is intentionally not a
+class here: it is realised by ``ExperimentRunner.run_oracle`` calling
+the engine with the ground-truth health profile as override, with no
+state of its own.
 
 The classes here are deliberately thin: they hold the *configuration*
 of each baseline (margin, threshold, trim ratio) and the operators it

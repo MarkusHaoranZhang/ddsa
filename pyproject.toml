@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dds-adapt"
-version = "0.1.0"
+version = "0.1.0.dev0"
 description = "Diagnosis-Driven Structural Adaptation for distributed satellite formation control"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,8 +45,8 @@ exclude = ["_*.py", "_*.txt"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = [
-    "E501",  # 行长由 formatter 控制
-    "E741",  # 论文里就用了 l, I 这些单字母变量
+    "E501",  # line length is governed by the formatter
+    "E741",  # the paper uses single-letter names like l, I; allow them
 ]
 
 [tool.pytest.ini_options]

@@ -36,8 +36,8 @@ authors:
     affiliation: Hunan Institute of Engineering
 repository-code: ''
 license: MIT
-version: 0.1.0
-date-released: '2025-05-27'
+version: 0.1.0-dev
+date-released: '2026-05-28'
 keywords:
   - distributed optimization
   - multi-agent systems

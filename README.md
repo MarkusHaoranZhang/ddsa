@@ -88,9 +88,8 @@ to turn one into a plot.
 
 ## Debugging a comparative number
 
-Once you have a concrete number you want to explain (e.g. "why is
-Proposed utilisation 0.66 in my run?"), the most direct path is to
-inspect the `EngineLog` produced by a single trajectory:
+Once you have a concrete number you want to explain, the most direct
+path is to inspect the `EngineLog` produced by a single trajectory:
 
 ```python
 from dds_adapt.runner import ExperimentRunner
@@ -112,31 +111,13 @@ The utilisation number printed in the comparative table is the
 time-averaged form built by `ExperimentRunner._utilisation_timeseries`
 on top of an Oracle / no-adaptation cost band; reading that method
 explains the absolute scale, and `KNOWN_DISCREPANCIES.md` discusses
-why this scale differs from the paper's headline 0.78.
+why this scale differs from the paper's headline numbers.
 
 ## What is in the box
 
-```
-src/dds_adapt/
-  config.py             topology + global parameters (Section 5.1.1 values)
-  utils.py              Sinkhorn-Knopp + adapt_mixing_matrix (Eq. 5)
-  simulator.py          planar double-integrator with health-modulated thrust
-  residual.py           residual energy + GDM training corpus
-  diagnostic.py         RPSGM + RPSR + OPT (Section 4.2)
-  optimizer.py          DIGing with global gradient + W swapping
-  cost.py               formation cost: tracking + coupling + safe-anchor
-  baselines.py          Robust DO / FDI / Byzantine / D-S Dempster / Oracle
-  metrics.py            three-layer, nine-metric system
-  engine.py             closed-loop runtime: sim → diag → adapt → DIGing → control
-  scenarios.py          Scenario 1, Scenario 2, topology, concurrent profiles
-  learning_baseline.py  §5.5.4 sklearn MLP baseline
-  runner.py             study drivers (comparative / ablation / extended)
-  cli.py                ``dds-run`` entry point
-scripts/
-  reproduce.py          one-shot driver, dumps results/<seed>/ + figures/
-  make_figures.py       13-figure renderer
-tests/                  32 unit + integration + regression tests
-```
+Top-level layout: `src/dds_adapt/` (the package), `scripts/`
+(`reproduce.py`, `make_figures.py`), `tests/`. For a paper-section to
+code-path map see [`STATUS.md`](STATUS.md).
 
 ## Figure index
 

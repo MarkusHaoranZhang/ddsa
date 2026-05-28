@@ -3,11 +3,10 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] – 2025-05-27
+## [Unreleased]
 
-Initial public release accompanying the paper *Diagnosis-Driven
-Structural Adaptation: A Closed-Loop Architecture for Elastic
-Degradation in Distributed Optimization*.
+The repository is in pre-release state; no version tag has been cut yet.
+The list below is the planned content of the first release (`v0.1.0`).
 
 ### Added
 
