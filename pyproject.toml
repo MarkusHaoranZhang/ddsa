@@ -62,7 +62,13 @@ strict = true
 # only ``no-any-return`` lets the rest of strict mode catch real bugs
 # (untyped defs, missing return annotations, unreachable code) while
 # avoiding cosmetic ``cast`` calls everywhere we return a numpy array.
-disable_error_code = ["no-any-return"]
+#
+# ``type-arg`` is also disabled: numpy 1.x stubs require every
+# ``ndarray`` annotation to be fully parameterised
+# (``ndarray[Any, dtype[Any]]``); numpy 2.x relaxes this. We support
+# numpy >= 1.24 (see pyproject ``dependencies``), so the bare
+# ``np.ndarray`` form must remain legal.
+disable_error_code = ["no-any-return", "type-arg"]
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unreachable = true
