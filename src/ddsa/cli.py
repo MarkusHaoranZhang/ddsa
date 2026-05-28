@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import argparse
 
-from dds_adapt.config import Config
-from dds_adapt.runner import ExperimentRunner
+from ddsa.config import Config
+from ddsa.runner import ExperimentRunner
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dds-run",
+        prog="ddsa",
         description="Diagnosis-Driven Structural Adaptation experiment suite.",
     )
     parser.add_argument(
@@ -37,7 +37,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """``dds-run`` console entry point: dispatch a study by name."""
+    """``ddsa`` console entry point: dispatch a study by name."""
     parser = _build_parser()
     args = parser.parse_args(argv)
 
@@ -98,7 +98,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if choice in ("learning", "all"):
         try:
-            from dds_adapt.learning_baseline import evaluate_learning_baseline
+            from ddsa.learning_baseline import evaluate_learning_baseline
             res = evaluate_learning_baseline(
                 n_agents=args.n_satellites, n_test=300, seed=args.seed
             )
@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> None:
             print(f"\nSkipping learning baseline: {exc}")
 
     if choice in ("hf", "all"):
-        from dds_adapt.hf_runner import run_hf_diagnostic_experiment
+        from ddsa.hf_runner import run_hf_diagnostic_experiment
         # The HF track has its own cadence (Config.DELTA_T_HF) and a
         # 600-step default that the diagnostic baseline rule depends
         # on. We do not forward --n-steps here so the published
@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  per-agent truth:    {hf.true_per_agent}")
 
     if choice in ("rho-cal", "all"):
-        from dds_adapt.rho_max_calibration import calibrate_rho_max
+        from ddsa.rho_max_calibration import calibrate_rho_max
         cal = calibrate_rho_max(runner, seed=args.seed)
         print("\n" + "=" * 80)
         print(" rho_max calibration (Eq. 12)")

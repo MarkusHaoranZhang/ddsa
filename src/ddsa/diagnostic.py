@@ -47,7 +47,7 @@ from itertools import permutations
 import numpy as np
 from scipy.special import expit as sigmoid
 
-from dds_adapt.config import Config
+from ddsa.config import Config
 
 
 def _gaussian_logpdf(x: np.ndarray, mean: float, std: float) -> np.ndarray:

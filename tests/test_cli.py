@@ -1,4 +1,4 @@
-"""CLI smoke tests for ``dds_adapt.cli.main``.
+"""CLI smoke tests for ``ddsa.cli.main``.
 
 These tests call ``main`` in-process (faster, avoids subprocess
 overhead and Windows console encoding gotchas) and verify that:
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from dds_adapt.cli import main
+from ddsa.cli import main
 
 
 # ----------------------------------------------------- happy paths
@@ -77,10 +77,10 @@ def test_main_rejects_non_integer_n_runs() -> None:
 
 
 def test_main_console_script_registered() -> None:
-    """The ``dds-run`` console script in pyproject must resolve to ``main``."""
+    """The ``ddsa`` console script in pyproject must resolve to ``main``."""
     from importlib.metadata import entry_points
 
     eps = entry_points(group="console_scripts")
-    matching = [ep for ep in eps if ep.name == "dds-run"]
-    assert matching, "dds-run console script not registered"
-    assert matching[0].value == "dds_adapt.cli:main"
+    matching = [ep for ep in eps if ep.name == "ddsa"]
+    assert matching, "ddsa console script not registered"
+    assert matching[0].value == "ddsa.cli:main"

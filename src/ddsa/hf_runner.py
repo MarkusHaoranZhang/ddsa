@@ -32,10 +32,10 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import stats
 
-from dds_adapt.config import Config
-from dds_adapt.diagnostic import RPSDiagnosticModule
-from dds_adapt.hf_simulator import NASA42StandInSimulator
-from dds_adapt.residual import broadcast_residual_matrix
+from ddsa.config import Config
+from ddsa.diagnostic import RPSDiagnosticModule
+from ddsa.hf_simulator import NASA42StandInSimulator
+from ddsa.residual import broadcast_residual_matrix
 
 
 def _energy_3d(residual: np.ndarray) -> np.ndarray:

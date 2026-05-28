@@ -23,8 +23,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dds_adapt.config import Config
-from dds_adapt.runner import ExperimentRunner
+from ddsa.config import Config
+from ddsa.runner import ExperimentRunner
 
 
 # ----------------------------------------------------------- helpers
@@ -155,7 +155,7 @@ def main() -> None:
     if not args.skip_learning:
         print("\n[+] Learning baseline (optional)")
         try:
-            from dds_adapt.learning_baseline import evaluate_learning_baseline
+            from ddsa.learning_baseline import evaluate_learning_baseline
 
             learn = evaluate_learning_baseline(
                 n_agents=Config.NUM_SATELLITES,
@@ -167,7 +167,7 @@ def main() -> None:
             print(f"  scikit-learn missing, skipping learning study: {exc}")
 
     print("\n[+] High-fidelity track (NASA 42 stand-in)")
-    from dds_adapt.hf_runner import run_hf_diagnostic_experiment
+    from ddsa.hf_runner import run_hf_diagnostic_experiment
     hf = run_hf_diagnostic_experiment(
         n_steps=200 if args.quick else 600, seed=args.seed
     )
@@ -183,7 +183,7 @@ def main() -> None:
     )
 
     print("\n[+] rho_max calibration (Eq. 12)")
-    from dds_adapt.rho_max_calibration import calibrate_rho_max
+    from ddsa.rho_max_calibration import calibrate_rho_max
     cal = calibrate_rho_max(
         runner,
         seed=args.seed,

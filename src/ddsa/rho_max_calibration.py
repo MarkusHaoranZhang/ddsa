@@ -38,8 +38,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.runner import ExperimentRunner
+from ddsa.config import Config
+from ddsa.runner import ExperimentRunner
 
 
 @dataclass

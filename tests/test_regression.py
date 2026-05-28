@@ -18,8 +18,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dds_adapt.config import Config
-from dds_adapt.runner import ExperimentRunner
+from ddsa.config import Config
+from ddsa.runner import ExperimentRunner
 
 
 @pytest.fixture(scope="module")

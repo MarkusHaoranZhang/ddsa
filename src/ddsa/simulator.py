@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dds_adapt.config import Config
+from ddsa.config import Config
 
 
 class SatelliteFormationSimulator:

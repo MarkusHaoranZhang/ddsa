@@ -23,12 +23,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.engine import run_closed_loop
-from dds_adapt.hf_runner import run_hf_diagnostic_experiment
-from dds_adapt.rho_max_calibration import calibrate_rho_max
-from dds_adapt.runner import ExperimentRunner
-from dds_adapt.scenarios import (
+from ddsa.config import Config
+from ddsa.engine import run_closed_loop
+from ddsa.hf_runner import run_hf_diagnostic_experiment
+from ddsa.rho_max_calibration import calibrate_rho_max
+from ddsa.runner import ExperimentRunner
+from ddsa.scenarios import (
     actuator_degradation_profile,
     communication_loss_w_sequence,
     concurrent_degradation_profile,

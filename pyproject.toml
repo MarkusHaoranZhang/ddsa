@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dds-adapt"
+name = "ddsa"
 version = "0.1.0.dev0"
 description = "Diagnosis-Driven Structural Adaptation for distributed satellite formation control"
 readme = "README.md"
@@ -32,7 +32,7 @@ plot = [
 ]
 
 [project.scripts]
-dds-run = "dds_adapt.cli:main"
+ddsa = "ddsa.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -55,7 +55,7 @@ addopts = "-q"
 
 [tool.mypy]
 python_version = "3.10"
-files = ["src/dds_adapt"]
+files = ["src/ddsa"]
 strict = true
 # numpy operations (mean, copy, clip, ...) return ``Any`` because numpy
 # does not yet ship full generic stubs that preserve dtype. Disabling

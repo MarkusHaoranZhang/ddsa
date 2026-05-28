@@ -24,8 +24,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.optimizer import DIGingOptimizer
+from ddsa.config import Config
+from ddsa.optimizer import DIGingOptimizer
 
 
 # ---------------------------------------------------------------------- DO

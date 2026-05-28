@@ -14,8 +14,8 @@ from __future__ import annotations
 import numpy as np
 from scipy import stats
 
-from dds_adapt.config import Config
-from dds_adapt.cost import formation_cost_global
+from ddsa.config import Config
+from ddsa.cost import formation_cost_global
 
 
 def compute_metrics(

@@ -25,7 +25,7 @@ python -m venv .venv
 pip install -e .[dev,learning,plot]
 pytest                                       :: 58 tests, ~3 min
 ruff check .                                 :: lint
-mypy src/dds_adapt                           :: type-check
+mypy src/ddsa                           :: type-check
 python scripts/reproduce.py --quick --seed 0 :: < 1 minute, smoke run
 ```
 
@@ -76,7 +76,7 @@ The full table (six variants and per-metric standard deviation) is in
 ## Hello, world
 
 ```python
-from dds_adapt.runner import ExperimentRunner
+from ddsa.runner import ExperimentRunner
 
 runner = ExperimentRunner(verbose=True)                # ~2 s to train the GDM
 profile, _ = runner.degradation_profile(n_steps=200)   # one-fault decay profile
@@ -95,7 +95,7 @@ Once you have a concrete number you want to explain, the most direct
 path is to inspect the `EngineLog` produced by a single trajectory:
 
 ```python
-from dds_adapt.runner import ExperimentRunner
+from ddsa.runner import ExperimentRunner
 
 runner = ExperimentRunner(verbose=True)
 profile, onset = runner.degradation_profile(n_steps=500, eta=0.002, seed=0)
@@ -118,7 +118,7 @@ why this scale differs from the paper's headline numbers.
 
 ## What is in the box
 
-Top-level layout: `src/dds_adapt/` (the package), `scripts/`
+Top-level layout: `src/ddsa/` (the package), `scripts/`
 (`reproduce.py`, `make_figures.py`), `tests/`. For a paper-section to
 code-path map see [`STATUS.md`](STATUS.md).
 
@@ -144,14 +144,14 @@ its effect; rerun it with `python scripts/make_figures.py --seed 0`.
 ## CLI
 
 ```cmd
-dds-run --experiments comparative   :: §5.4.1
-dds-run --experiments ablation      :: §5.3
-dds-run --experiments scenario2     :: §5.4.2
-dds-run --experiments topology      :: §5.5.1
-dds-run --experiments concurrent    :: §5.5.2
-dds-run --experiments scale         :: §5.5.3
-dds-run --experiments learning      :: §5.5.4
-dds-run --experiments all
+ddsa --experiments comparative   :: §5.4.1
+ddsa --experiments ablation      :: §5.3
+ddsa --experiments scenario2     :: §5.4.2
+ddsa --experiments topology      :: §5.5.1
+ddsa --experiments concurrent    :: §5.5.2
+ddsa --experiments scale         :: §5.5.3
+ddsa --experiments learning      :: §5.5.4
+ddsa --experiments all
 ```
 
 Common flags:
@@ -206,7 +206,7 @@ the JSON files alongside it.
 ```cmd
 pytest          :: 58 tests covering every module, the closed loop, the CLI, scenario boundaries, and ordering-inequality regression of the comparative + ablation studies
 ruff check .    :: lint
-mypy src/dds_adapt :: type-check
+mypy src/ddsa :: type-check
 ```
 
 ## Limitations

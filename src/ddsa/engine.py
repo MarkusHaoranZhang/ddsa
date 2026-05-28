@@ -30,13 +30,13 @@ from typing import Protocol
 
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.cost import local_cost_grad
-from dds_adapt.diagnostic import RPSDiagnosticModule
-from dds_adapt.optimizer import DIGingOptimizer
-from dds_adapt.residual import broadcast_residual_matrix, residual_energy
-from dds_adapt.simulator import SatelliteFormationSimulator
-from dds_adapt.utils import adapt_mixing_matrix
+from ddsa.config import Config
+from ddsa.cost import local_cost_grad
+from ddsa.diagnostic import RPSDiagnosticModule
+from ddsa.optimizer import DIGingOptimizer
+from ddsa.residual import broadcast_residual_matrix, residual_energy
+from ddsa.simulator import SatelliteFormationSimulator
+from ddsa.utils import adapt_mixing_matrix
 
 
 class _SimulatorProtocol(Protocol):

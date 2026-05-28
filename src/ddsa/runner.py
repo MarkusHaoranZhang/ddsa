@@ -14,28 +14,28 @@ from typing import Any
 
 import numpy as np
 
-from dds_adapt.baselines import (
+from ddsa.baselines import (
     BaselineByzantineResilient,
     BaselineDSFusion,
     BaselineFDIReconf,
 )
-from dds_adapt.config import Config
-from dds_adapt.cost import formation_cost_global, local_cost_grad
-from dds_adapt.diagnostic import RPSDiagnosticModule
-from dds_adapt.engine import EngineLog, run_closed_loop
-from dds_adapt.metrics import compute_metrics
-from dds_adapt.residual import (
+from ddsa.config import Config
+from ddsa.cost import formation_cost_global, local_cost_grad
+from ddsa.diagnostic import RPSDiagnosticModule
+from ddsa.engine import EngineLog, run_closed_loop
+from ddsa.metrics import compute_metrics
+from ddsa.residual import (
     broadcast_residual_matrix,
     residual_energy,
     train_gdm,
 )
-from dds_adapt.scenarios import (
+from ddsa.scenarios import (
     actuator_degradation_profile,
     communication_loss_w_sequence,
     concurrent_degradation_profile,
     perturb_topology,
 )
-from dds_adapt.simulator import SatelliteFormationSimulator
+from ddsa.simulator import SatelliteFormationSimulator
 
 # Type aliases used pervasively in this module.
 #

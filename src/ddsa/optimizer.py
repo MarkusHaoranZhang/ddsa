@@ -22,7 +22,7 @@ from collections.abc import Callable
 
 import numpy as np
 
-from dds_adapt.config import Config
+from ddsa.config import Config
 
 
 class DIGingOptimizer:

@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.simulator import SatelliteFormationSimulator
+from ddsa.config import Config
+from ddsa.simulator import SatelliteFormationSimulator
 
 
 def residual_energy(residual_2d: np.ndarray) -> np.ndarray:

@@ -4,26 +4,26 @@ from __future__ import annotations
 
 import numpy as np
 
-from dds_adapt.baselines import (
+from ddsa.baselines import (
     BaselineByzantineResilient,
     BaselineDSFusion,
     BaselineFDIReconf,
     BaselineRobustDO,
 )
-from dds_adapt.config import Config
-from dds_adapt.cost import local_cost_grad
-from dds_adapt.diagnostic import RPSDiagnosticModule
-from dds_adapt.engine import run_closed_loop
-from dds_adapt.metrics import compute_metrics
-from dds_adapt.optimizer import DIGingOptimizer
-from dds_adapt.residual import (
+from ddsa.config import Config
+from ddsa.cost import local_cost_grad
+from ddsa.diagnostic import RPSDiagnosticModule
+from ddsa.engine import run_closed_loop
+from ddsa.metrics import compute_metrics
+from ddsa.optimizer import DIGingOptimizer
+from ddsa.residual import (
     broadcast_residual_matrix,
     collect_residual_samples,
     residual_energy,
     train_gdm,
 )
-from dds_adapt.simulator import SatelliteFormationSimulator
-from dds_adapt.utils import adapt_mixing_matrix, sinkhorn_double_stochastic
+from ddsa.simulator import SatelliteFormationSimulator
+from ddsa.utils import adapt_mixing_matrix, sinkhorn_double_stochastic
 
 
 # ----------------------------------------------------- topology + utils
@@ -211,7 +211,7 @@ def test_cost_and_gradient_finite():
     X = desired + np.random.randn(n, 2) * 0.05
     edges = Config.edges(n)
     health = np.array([0.7, 1.0, 1.0, 1.0])
-    from dds_adapt.cost import formation_cost_global
+    from ddsa.cost import formation_cost_global
 
     c = formation_cost_global(X, health, desired, edges)
     g = local_cost_grad(X, 0, health, desired, edges)
@@ -256,7 +256,7 @@ def test_collect_residual_samples_shape():
 
 # ----------------------------------------------------- HF stand-in
 def test_hf_simulator_step_finite():
-    from dds_adapt.hf_simulator import NASA42StandInSimulator
+    from ddsa.hf_simulator import NASA42StandInSimulator
 
     sim = NASA42StandInSimulator(n_satellites=3, dt=1.0, seed=0)
     cmd = sim.commanded_control(sim.desired_positions)
@@ -267,7 +267,7 @@ def test_hf_simulator_step_finite():
 
 
 def test_hf_runner_returns_finite_metrics():
-    from dds_adapt.hf_runner import run_hf_diagnostic_experiment
+    from ddsa.hf_runner import run_hf_diagnostic_experiment
 
     out = run_hf_diagnostic_experiment(n_steps=80, seed=0)
     assert np.isfinite(out.health_mae)
@@ -276,8 +276,8 @@ def test_hf_runner_returns_finite_metrics():
 
 
 def test_rho_max_calibration_returns_numbers():
-    from dds_adapt.rho_max_calibration import calibrate_rho_max
-    from dds_adapt.runner import ExperimentRunner as _R
+    from ddsa.rho_max_calibration import calibrate_rho_max
+    from ddsa.runner import ExperimentRunner as _R
 
     runner = _R(n_satellites=4, seed=0)
     cal = calibrate_rho_max(

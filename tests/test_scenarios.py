@@ -1,4 +1,4 @@
-"""Boundary tests for the scenario builders in ``dds_adapt.scenarios``.
+"""Boundary tests for the scenario builders in ``ddsa.scenarios``.
 
 These functions are driven by the study runners (so the closed-loop
 tests cover them indirectly), but the boundary behaviour at parameter
@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dds_adapt.config import Config
-from dds_adapt.scenarios import (
+from ddsa.config import Config
+from ddsa.scenarios import (
     actuator_degradation_profile,
     communication_loss_w_sequence,
     concurrent_degradation_profile,

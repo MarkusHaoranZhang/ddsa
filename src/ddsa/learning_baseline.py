@@ -17,9 +17,9 @@ from typing import Any
 
 import numpy as np
 
-from dds_adapt.config import Config
-from dds_adapt.residual import broadcast_residual_matrix, residual_energy
-from dds_adapt.simulator import SatelliteFormationSimulator
+from ddsa.config import Config
+from ddsa.residual import broadcast_residual_matrix, residual_energy
+from ddsa.simulator import SatelliteFormationSimulator
 
 
 def _collect_supervised(

@@ -34,7 +34,7 @@ jobs:
         run: ruff check .
 
       - name: Type-check (mypy)
-        run: mypy src/dds_adapt
+        run: mypy src/ddsa
 
       - name: Test (pytest)
         run: pytest --maxfail=1

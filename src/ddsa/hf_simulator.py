@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dds_adapt.config import Config
+from ddsa.config import Config
 
 # Earth and orbit constants -----------------------------------------------
 MU_EARTH = 3.986004418e14  # m^3 / s^2
