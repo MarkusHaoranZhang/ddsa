@@ -130,6 +130,13 @@ def run_hf_diagnostic_experiment(
     h_hat_log: list[np.ndarray] = []
     h_true_log: list[np.ndarray] = []
     detection_tick: int | None = None
+    # Use a *relative* detection rule: trigger when any agent's h_hat
+    # drops below ``baseline_h_hat - 0.2``, where the baseline is the
+    # estimate at t=0 (no fault yet). The OPT distribution is not
+    # uniform-1 even on a fully healthy formation, so an absolute
+    # threshold like ``h_hat < 0.9`` would fire on every run from
+    # tick 0 -- giving a meaningless negative detection delay.
+    baseline_h_hat: np.ndarray | None = None
     for tick in range(0, n_steps, diag_step):
         sim.set_health(health_profile[:, tick])
         residual = sim.sample_residual()
@@ -138,7 +145,12 @@ def run_hf_diagnostic_experiment(
         h_hat, _, _ = diag.diagnose_round(R)
         h_hat_log.append(h_hat)
         h_true_log.append(health_profile[:, tick].copy())
-        if detection_tick is None and (h_hat < 0.9).any():
+        if baseline_h_hat is None:
+            baseline_h_hat = h_hat.copy()
+        if (
+            detection_tick is None
+            and ((h_hat - baseline_h_hat) < -0.2).any()
+        ):
             detection_tick = tick
 
     h_hat_arr = np.stack(h_hat_log)

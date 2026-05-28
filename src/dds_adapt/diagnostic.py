@@ -95,8 +95,19 @@ class RPSDiagnosticModule:
                     f"fault block for agent {j} has shape {B.shape}, "
                     f"expected (T, {self.n})"
                 )
-            self.mean_f[:, j] = B.mean(axis=0)
-            self.std_f[:, j] = B.std(axis=0).clip(min=1e-3)
+            # Under the broadcast residual structure
+            # ``R[i, j] = own_energy[j] + cross-agent noise``, every
+            # observer sees the same expected residual at column j; so
+            # ``mean_f[i, j]`` depends only on j, not on i. We therefore
+            # broadcast the column-j *diagonal* of ``B_j.mean(axis=0)``
+            # across all rows. Storing ``B.mean(axis=0)`` directly into
+            # the column would mix into mean_f[i!=j, j] the *off-target*
+            # statistics, which collapse back toward the healthy mean
+            # and silently invert the diagnostic order at small N.
+            faulty_mean_at_target = float(B.mean(axis=0)[j])
+            faulty_std_at_target = max(float(B.std(axis=0)[j]), 1e-3)
+            self.mean_f[:, j] = faulty_mean_at_target
+            self.std_f[:, j] = faulty_std_at_target
         self._fitted = True
 
     # ------------------------------ memberships & local PMF
@@ -231,17 +242,30 @@ class RPSDiagnosticModule:
     ) -> np.ndarray:
         """OPT: per-agent health = 1 - P_OPT(theta_j) (Eq. 10 of the paper).
 
-        Following Section 3.3, ``P_OPT(theta_j)`` is the sum of the fused
-        permutation mass over every permutation in which ``theta_j``
-        appears. The resulting vector satisfies ``sum_j P_OPT(theta_j) = 1``
-        because every permutation contributes its mass exactly ``len(perm)``
-        times distributed across its members; we therefore renormalise so
-        the unit-sum identity holds even when the PMF is truncated.
+        Position-weighted form. Each permutation ``A`` distributes its
+        mass to the agents it contains *in proportion to their rank*:
+        an agent in position ``r`` of ``A`` (1-indexed, smallest = most
+        suspect) receives ``m(A) · 1/r / H_{|A|}``, where ``H_k`` is
+        the k-th harmonic number. This recovers the priority ordering
+        the RPS pipeline carries through fusion: a long permutation
+        ``(0, 1, 2)`` puts most of its mass on agent 0 (the leading
+        suspect), not equally on all three.
+
+        The plain "any agent in the permutation gets the full mass"
+        rule, while structurally simpler, collapses to a uniform
+        distribution as soon as length-N permutations dominate the
+        fused PMF -- which is the regime our truncated PES sits in.
         """
         deg_prob = np.zeros(self.n)
         for perm, mass in fused_pmf.items():
-            for agent_idx in perm:
-                deg_prob[agent_idx] += mass
+            length = len(perm)
+            if length == 0:
+                continue
+            # harmonic number normaliser: 1/1 + 1/2 + ... + 1/length
+            harmonic = sum(1.0 / r for r in range(1, length + 1))
+            for rank_minus_one, agent_idx in enumerate(perm):
+                weight = (1.0 / (rank_minus_one + 1)) / harmonic
+                deg_prob[agent_idx] += mass * weight
         total = deg_prob.sum()
         if total > 0:
             deg_prob = deg_prob / total
