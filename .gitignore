@@ -17,3 +17,8 @@ figures/
 *.npy
 .idea/
 .vscode/
+
+# Probe / scratch files used during interactive review (kept out of git
+# so an accidental ``git add -A`` doesn't drag them in).
+_*.txt
+_*.py
