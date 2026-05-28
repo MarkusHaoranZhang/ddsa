@@ -302,10 +302,20 @@ class ExperimentRunner:
         return m, log
 
     # --- ablation variants ------------------------------------------
-    def _run_ds_closed_loop(
+    def _run_ds_inline(
         self, health_profile: np.ndarray, seed: int
     ) -> tuple[MetricDict, EngineLog]:
-        """§5.3 Variant A: closed loop + D-S fusion in place of RPSR."""
+        """§5.3 Variant A: closed loop + D-S fusion in place of RPSR.
+
+        Builds a per-tick profile of D-S Dempster-fused soft healthy
+        beliefs (see ``_build_ds_inline_profile``) and feeds it to the
+        engine as a *health override*; the rest of the closed loop
+        (mixing-matrix adaptation, DIGing, formation feedback) is the
+        same as ``run_proposed``. The earlier name
+        ``_run_ds_closed_loop`` was misleading -- "inline" reflects
+        the actual mechanism: D-S replaces RPSR upstream of the engine,
+        not the engine itself.
+        """
         override = self._build_ds_inline_profile(health_profile, seed)
         return self._run_engine_method(
             health_profile, seed, override=override, use_w_adaptation=True
@@ -476,9 +486,13 @@ class ExperimentRunner:
             sim.set_health(health_profile[:, diag_start])
             residual = sim.sample_residual()
             R = broadcast_residual_matrix(residual_energy(residual), rng)
-            # sigmoid centred at 0.10 -> healthy residuals (~0.01) score
-            # near 1, deeply faulty residuals (~0.23) score near 0.
-            soft = 1.0 / (1.0 + np.exp(40 * (R - 0.10)))
+            # Sharp sigmoid centred between the healthy noise floor and
+            # the deeply-faulty residual energy: see Config docstring
+            # for the calibration rationale.
+            soft = 1.0 / (1.0 + np.exp(
+                Config.DS_SIGMOID_ISOLATION_TEMP
+                * (R - Config.DS_SIGMOID_ISOLATION_CENTRE)
+            ))
             h_hat = ds.fuse(soft)
             below = h_hat < threshold
             below_count = np.where(below, below_count + 1, 0)
@@ -509,7 +523,12 @@ class ExperimentRunner:
             sim.set_health(health_profile[:, diag_start])
             residual = sim.sample_residual()
             R = broadcast_residual_matrix(residual_energy(residual), rng)
-            soft = 1.0 / (1.0 + np.exp(8 * (R - 0.05)))
+            # Gentler sigmoid: feeds soft output back as a continuous
+            # health override every tick (see Config docstring).
+            soft = 1.0 / (1.0 + np.exp(
+                Config.DS_SIGMOID_INLINE_TEMP
+                * (R - Config.DS_SIGMOID_INLINE_CENTRE)
+            ))
             h_hat = ds.fuse(soft)
             diag_end = min(n_steps, (k + 1) * steps_per_diag)
             ds_profile[:, diag_start:diag_end] = h_hat[:, None]
@@ -802,7 +821,7 @@ class ExperimentRunner:
         """§5.3 ablation: Full + Variants A-E on the §5.4.1 single-fault profile."""
         variants: dict[str, MethodFn] = {
             "Full framework": self.run_proposed,
-            "Variant A (D-S)": self._run_ds_closed_loop,
+            "Variant A (D-S)": self._run_ds_inline,
             "Variant B (Average)": self._run_average_fusion,
             "Variant C (No Sinkhorn)": self._run_without_sinkhorn,
             "Variant D (binary)": self._run_binary_health,

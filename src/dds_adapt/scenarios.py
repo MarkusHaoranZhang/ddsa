@@ -104,6 +104,8 @@ def perturb_topology(
     """
     if rng is None:
         rng = np.random.default_rng()
+    if n_removals < 0:
+        raise ValueError(f"n_removals must be >= 0, got {n_removals}")
     n = W_base.shape[0]
     # candidate ordered list
     candidates: list[tuple[int, int]] = []

@@ -210,3 +210,12 @@ def test_perturb_topology_unknown_mode_raises() -> None:
     W = Config.get_communication_graph(4)
     with pytest.raises(ValueError, match="unknown mode"):
         perturb_topology(W, n_intervals=2, mode="bogus", n_removals=1)
+
+
+def test_perturb_topology_negative_n_removals_raises() -> None:
+    """A negative ``n_removals`` is a silent footgun (Python slice semantics
+    would interpret ``-1`` as "all but last edge"); the function must
+    refuse it explicitly."""
+    W = Config.get_communication_graph(4)
+    with pytest.raises(ValueError, match=">= 0"):
+        perturb_topology(W, n_intervals=2, mode="random", n_removals=-1)

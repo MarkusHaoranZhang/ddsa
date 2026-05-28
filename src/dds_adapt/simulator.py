@@ -141,6 +141,17 @@ class SatelliteFormationSimulator:
         return self.state.copy(), realised, residual
 
     # ---- Helpers ------------------------------------------------------
+    def reset_to_reference(self) -> None:
+        """Snap every agent to its formation reference at zero velocity.
+
+        Used by training-data collectors that want a clean probe state
+        without going through the simulator's stochastic reset path.
+        Equivalent to setting state to ``[*desired_positions[i], 0, 0]``
+        for every agent ``i``.
+        """
+        self.state[:, :2] = self.desired_positions
+        self.state[:, 2:] = 0.0
+
     def get_state(self) -> np.ndarray:
         """Copy of the full ``[x, y, vx, vy]`` state for every agent."""
         return self.state.copy()

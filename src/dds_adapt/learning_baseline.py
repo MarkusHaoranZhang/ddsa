@@ -54,8 +54,7 @@ def _collect_supervised(
             time_into_decay = max(0, inner - onset)
             h[faulty] = float(np.exp(-eta * time_into_decay))
             sim.set_health(h)
-            sim.state[:, :2] = sim.desired_positions
-            sim.state[:, 2:] = 0.0
+            sim.reset_to_reference()
             residual = sim.sample_residual()
             own = residual_energy(residual)
             R = broadcast_residual_matrix(own, rng)

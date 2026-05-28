@@ -40,6 +40,28 @@ class Config:
     SINKHORN_ITERS: int = 100
     SINKHORN_TOL: float = 1e-6
 
+    # ---- D-S baseline calibration --------------------------------------
+    # Two D-S code paths consume residual energies through a sigmoid:
+    #
+    # * the §5.4 *isolation* path (``runner._compute_ds_isolation``)
+    #   only commits a *binary* isolation flag, so the sigmoid is sharp
+    #   (TEMP=40) and centred *between* the healthy noise floor (~0.01)
+    #   and the deeply-faulty residual energy (~0.23) at CENTRE=0.10.
+    #   This produces a near-step from "healthy" to "faulty" that
+    #   resists noise and matches the §5.4.1 narrative of D-S delaying
+    #   isolation until conviction is high.
+    #
+    # * the §5.3 Variant A *inline* path
+    #   (``runner._build_ds_inline_profile``) feeds the soft Dempster
+    #   output back as a continuous health override every tick, so the
+    #   sigmoid is gentler (TEMP=8) and centred lower (CENTRE=0.05) to
+    #   keep the gradient informative across the full residual range
+    #   rather than committing on a single tick.
+    DS_SIGMOID_ISOLATION_TEMP: float = 40.0
+    DS_SIGMOID_ISOLATION_CENTRE: float = 0.10
+    DS_SIGMOID_INLINE_TEMP: float = 8.0
+    DS_SIGMOID_INLINE_CENTRE: float = 0.05
+
     # ---- Degradation model ---------------------------------------------
     ETA_SINGLE: float = 0.002
     ETA_FAST: float = 0.003
