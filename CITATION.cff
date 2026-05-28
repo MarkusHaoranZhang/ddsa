@@ -34,10 +34,10 @@ authors:
     family-names: Li
     email: jli@hnie.edu.cn
     affiliation: Hunan Institute of Engineering
-repository-code: ''
+repository-code: 'https://github.com/MarkusHaoranZhang/ddsa'
 license: MIT
-version: 0.1.0.dev0
-date-released: '2026-05-28'
+version: 0.1.0
+date-released: '2026-05-29'
 keywords:
   - distributed optimization
   - multi-agent systems

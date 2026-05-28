@@ -3,10 +3,10 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-05-29
 
-The repository is in pre-release state; no version tag has been cut yet.
-The list below is the planned content of the first release (`v0.1.0`).
+First public release. Companion code for the paper, intended to be
+cited by DOI alongside the manuscript.
 
 ### Added
 
