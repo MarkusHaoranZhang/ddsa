@@ -237,8 +237,10 @@ def fig_gamma_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, qu
 # ----------------------------------------------------- 6 + 7. scenario 1 trajectories
 def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 500 if not quick else 200
-    profile, _ = actuator_degradation_profile(        runner.n, n_steps, eta=Config.ETA_SINGLE, onset_time=80
-    , rng=np.random.default_rng(seed))
+    profile, _ = actuator_degradation_profile(
+        runner.n, n_steps, eta=Config.ETA_SINGLE, onset_time=80,
+        rng=np.random.default_rng(seed),
+    )
 
     methods = {
         "Proposed": runner.run_proposed,

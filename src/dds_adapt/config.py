@@ -66,10 +66,12 @@ class Config:
     def get_communication_graph(n_satellites: int = NUM_SATELLITES) -> np.ndarray:
         """Build the doubly stochastic mixing matrix.
 
-        Topology is a ring with two extra short-cut chords. Self / ring /
-        chord weights are placed symmetrically around every node, so the
-        resulting matrix is symmetric. After normalising rows once the
-        matrix is then doubly stochastic (DIGing's standing assumption).
+        Topology is a ring augmented by four short-cut chords on
+        every node (offsets ±2 and ±3). Self / ring / chord weights
+        are placed symmetrically around every node, so the resulting
+        matrix is symmetric. Single row-sum normalisation then yields
+        a doubly stochastic mixing matrix (DIGing's standing
+        assumption).
         """
         W = np.zeros((n_satellites, n_satellites))
         for i in range(n_satellites):
@@ -102,8 +104,11 @@ class Config:
 
     @staticmethod
     def algebraic_connectivity(W: np.ndarray) -> float:
-        """Second smallest eigenvalue of the graph Laplacian."""
+        """Second smallest eigenvalue of the graph Laplacian.
+
+        ``np.linalg.eigvalsh`` already returns a sorted ascending
+        array, so the second-smallest eigenvalue is just index 1.
+        """
         L = np.diag(W.sum(axis=1)) - W
         eigenvalues = np.linalg.eigvalsh(L)
-        eigenvalues.sort()
         return float(eigenvalues[1])

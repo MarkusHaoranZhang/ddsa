@@ -50,7 +50,6 @@ class DIGingOptimizer:
     def step(
         self,
         local_grad_func: Callable[[np.ndarray, int], np.ndarray],
-        health: np.ndarray | None = None,
     ) -> np.ndarray:
         """One DIGing update.
 
@@ -59,7 +58,6 @@ class DIGingOptimizer:
         ``i``. Each agent applies this gradient against its own copy
         ``self.x[i]``.
         """
-        del health  # forwarded into local_grad_func by the caller via closure
         # gather gradients: g[i] = ∇ f_i(self.x[i])
         grad_curr = np.stack(
             [local_grad_func(self.x[i], i) for i in range(self.n)], axis=0

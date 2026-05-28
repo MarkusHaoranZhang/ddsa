@@ -1,6 +1,6 @@
 """High-level experiment driver.
 
-Every method (Proposed + 5 baselines + 6 ablation variants) is wrapped
+Every method (Proposed + 5 baselines + 5 ablation variants) is wrapped
 as a callable that takes a single trajectory and returns a metric dict
 plus the engine log. The closed-loop engine is shared, so methods
 differ only in how they produce ``h_hat`` and whether they perform the
@@ -158,7 +158,6 @@ class ExperimentRunner:
         iso_mask: np.ndarray | None = None,
         use_w_adaptation: bool = True,
         w_base_per_interval: list[np.ndarray] | None = None,
-        n_diag_intervals: int | None = None,
     ) -> tuple[dict, EngineLog]:
         """Single entry point for every engine-driven method.
 
@@ -173,7 +172,7 @@ class ExperimentRunner:
             W_base=self.W,
             desired_positions=self.desired_positions,
             edges=self.edges,
-            n_diag_intervals=n_diag_intervals or self._N_DIAG_INTERVALS,
+            n_diag_intervals=self._N_DIAG_INTERVALS,
             iters_per_diag=self._ITERS_PER_DIAG,
             alpha=self.alpha,
             gamma=self.gamma,

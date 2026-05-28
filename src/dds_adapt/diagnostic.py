@@ -108,7 +108,9 @@ class RPSDiagnosticModule:
         log_f = _gaussian_logpdf(
             residual_vec, self.mean_f[agent_i], self.std_f[agent_i]
         )
-        # softmax-style normalisation for numerical stability
+        # log-sum-exp stabilisation: subtract the per-element max
+        # before exponentiating so the ratio is numerically safe even
+        # when both log-pdfs are very negative.
         m = np.maximum(log_h, log_f)
         post = np.exp(log_f - m) / (np.exp(log_h - m) + np.exp(log_f - m))
         return post

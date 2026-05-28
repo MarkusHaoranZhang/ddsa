@@ -122,7 +122,6 @@ def local_cost_grad(
     state ``X``, with non-zero entries only on the rows of agents
     whose decision variables actually appear in ``f_i``.
     """
-    n = len(desired_positions)
     safe = _safe_anchor(desired_positions, safe_offset)
     g = np.zeros_like(X)
 
@@ -139,7 +138,6 @@ def local_cost_grad(
             diff = X[a] - X[b] - d_ab
             g[a] += beta * diff
             g[b] -= beta * diff
-    del n
     return g
 
 

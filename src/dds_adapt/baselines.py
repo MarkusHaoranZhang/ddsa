@@ -31,6 +31,9 @@ class BaselineRobustDO:
     The paper describes the baseline as treating degradation as bounded
     disturbance through a uniform conservative weight (``1 - margin``) on
     every agent's cost contribution, rather than estimating health.
+    The runner builds the conservative-health vector inline; the class
+    only owns the configuration and a ``DIGingOptimizer`` instance for
+    callers that want to drive it directly.
     """
 
     def __init__(
@@ -48,10 +51,6 @@ class BaselineRobustDO:
         self.alpha = alpha
         self.margin = robustness_margin
         self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
-
-    def conservative_health(self) -> np.ndarray:
-        """Uniform ``1 - margin`` health vector used by the runner override."""
-        return np.full(self.n, 1.0 - self.margin)
 
 
 # ----------------------------------------------------------------- FDI
@@ -95,7 +94,8 @@ class BaselineByzantineResilient:
 
     The class holds the trim ratio plus a private ``DIGingOptimizer``
     instance the runner reuses for its custom Byzantine-aware update
-    loop (``runner._byzantine_optimise``).
+    loop (``runner._byzantine_optimise``), which performs the trimmed
+    mean inline against its own ``(N, N, dim)`` state.
     """
 
     def __init__(
@@ -113,13 +113,6 @@ class BaselineByzantineResilient:
         self.alpha = alpha
         self.trim_ratio = trim_ratio
         self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
-
-    def trimmed_mean(self, x: np.ndarray) -> np.ndarray:
-        """Per-coordinate trimmed mean with a ``trim_ratio`` cut on each side."""
-        n_trim = max(1, int(self.n * self.trim_ratio))
-        sorted_x = np.sort(x, axis=0)
-        trimmed = sorted_x[n_trim:-n_trim] if n_trim * 2 < self.n else sorted_x
-        return trimmed.mean(axis=0)
 
 
 # -------------------------------------------------------- Dempster-Shafer

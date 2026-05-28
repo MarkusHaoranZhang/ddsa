@@ -1,7 +1,7 @@
 """End-to-end reproduction driver.
 
 Runs every study reported in the paper, dumps raw metrics to JSON, and
-emits all 12 figures. Designed so a reviewer can do:
+emits all 13 figures. Designed so a reviewer can do:
 
     pip install -e .[dev,learning,plot]
     python scripts/reproduce.py

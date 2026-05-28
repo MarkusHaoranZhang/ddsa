@@ -7,10 +7,10 @@ output. Absolute utilisation numbers are documented in
 ``KNOWN_DISCREPANCIES.md``; the tests below pin the *qualitative*
 claims that the paper's narrative depends on.
 
-The fixture is a tiny n_runs=3, n_steps=200 run sized for ~10 seconds
-on a laptop. Anything stronger than ordering inequalities here would
-have to be relaxed to absorb the small-fixture noise; we avoid that
-trap by keeping the assertions ordinal.
+The fixture is a paper-spec ``n_runs=2, n_steps=500`` run sized for
+~50 seconds on a laptop. Anything stronger than ordering inequalities
+here would have to be relaxed to absorb the small-fixture noise; we
+avoid that trap by keeping the assertions ordinal.
 """
 
 from __future__ import annotations

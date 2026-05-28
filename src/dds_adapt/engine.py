@@ -47,7 +47,9 @@ class _SimulatorProtocol(Protocol):
     def set_health(self, health: np.ndarray) -> None: ...
     def sample_residual(self) -> np.ndarray: ...
     def commanded_control(self, target: np.ndarray) -> np.ndarray: ...
-    def step(self, commanded: np.ndarray): ...
+    def step(
+        self, commanded: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
     def get_positions(self) -> np.ndarray: ...
 
 
@@ -214,14 +216,13 @@ def run_closed_loop(
             # pin every agent's *estimate* of the isolated rows to the reference
             for iso_idx in np.where(iso_mask)[0]:
                 optimiser.x[:, iso_idx, :] = desired_positions[iso_idx]
-        x_per_agent, hist = optimiser.optimize(
-            grad, n_iters=iters_per_diag
-        )
-        # consensus estimate of the whole formation
+        _, hist = optimiser.optimize(grad, n_iters=iters_per_diag)
+        # consensus estimate of the whole formation. Isolated rows are
+        # already pinned to the reference inside the optimiser state
+        # (above) and the gradient closure zeroes their force, so the
+        # mean across agent estimates returns the reference for those
+        # rows automatically.
         X_consensus = optimiser.consensus_estimate()
-        if iso_mask.any():
-            X_consensus = X_consensus.copy()
-            X_consensus[iso_mask] = desired_positions[iso_mask]
         wall = time.perf_counter() - t0
         # Each agent steers toward its own row of the consensus formation;
         # after DIGing converges the per-agent estimates agree closely so

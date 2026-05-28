@@ -1,4 +1,13 @@
-"""Three-layer metric system used by the experiments."""
+"""Three-layer metric system used by the experiments.
+
+This module is responsible for the *cost-layer* and *diagnostic-layer*
+slice of the paper's nine-metric protocol: ``global_cost``,
+``constraint_rate``, ``utilization`` (proximity-based fallback),
+``health_mae``, ``kendall_tau``. The system-efficiency layer
+(``detection_delay``, ``comm_rounds``, ``convergence_iters``,
+``wall_time``) is added by ``runner.metrics_from_log`` from the
+engine telemetry, so the two together produce the full 9-metric dict.
+"""
 
 from __future__ import annotations
 

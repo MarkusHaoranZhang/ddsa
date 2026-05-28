@@ -40,8 +40,6 @@ def main(argv: list[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    Config.N_RUNS = args.n_runs
-
     print("=" * 80)
     print(" Diagnosis-Driven Structural Adaptation - Experiment Suite")
     print("=" * 80)

@@ -51,8 +51,8 @@ def _measure_steady_state(
     rho_factor: float,
     seed: int,
     n_steps: int,
-) -> tuple[float, bool]:
-    """Run one trajectory at the given rho factor; return (error, diverged?).
+) -> float:
+    """Run one trajectory at the given rho factor; return tracking error.
 
     The "error" we measure is the tracking error of the DIGing iterate
     relative to the *moving* optimum implied by the current health
@@ -60,6 +60,10 @@ def _measure_steady_state(
     this tracking error can no longer follow the moving optimum, which
     manifests as a monotonically growing residual against the moving
     target rather than DIGing internal divergence.
+
+    ``calibrate_rho_max`` decides divergence by comparing this error
+    against the smallest-rho baseline; that judgement lives in the
+    caller, not here.
     """
     eta = rho_factor * Config.CHARACTERISTIC_HEALTH_RATE
     profile, _ = runner.degradation_profile(n_steps, eta=eta, onset_time=0)
@@ -67,17 +71,14 @@ def _measure_steady_state(
 
     # tracking error: ||DIGing iterate - desired_positions||
     if not log.positions:
-        return float("nan"), True
+        return float("nan")
     errs = np.array(
         [float(np.linalg.norm(p - runner.desired_positions)) for p in log.positions]
     )
-    # diverged iff tracking error grows monotonically and at least doubles
     if not np.all(np.isfinite(errs)):
-        return float("nan"), True
-    head = float(np.mean(errs[: max(1, len(errs) // 4)]))
+        return float("nan")
     tail = float(np.mean(errs[-max(1, len(errs) // 4):]))
-    diverged = tail > 2.0 * max(head, 1e-9)
-    return tail, bool(diverged)
+    return tail
 
 
 def calibrate_rho_max(
@@ -103,11 +104,10 @@ def calibrate_rho_max(
         )
 
     errors = np.zeros(len(rho_factors))
-    diverged = np.zeros(len(rho_factors), dtype=bool)
     for i, rho in enumerate(rho_factors):
         run_errors: list[float] = []
         for r in range(n_repeats):
-            err, _ = _measure_steady_state(
+            err = _measure_steady_state(
                 runner, float(rho), seed + r * 17, n_steps
             )
             run_errors.append(err)
