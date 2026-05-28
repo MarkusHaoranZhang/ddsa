@@ -38,6 +38,7 @@ repository-code: 'https://github.com/MarkusHaoranZhang/ddsa'
 license: MIT
 version: 0.1.0
 date-released: '2026-05-29'
+doi: 10.5281/zenodo.20434143
 keywords:
   - distributed optimization
   - multi-agent systems

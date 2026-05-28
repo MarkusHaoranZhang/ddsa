@@ -1,5 +1,7 @@
 # Diagnosis-Driven Structural Adaptation
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20434143.svg)](https://doi.org/10.5281/zenodo.20434143)
+
 Companion code for *Diagnosis-Driven Structural Adaptation: A
 Closed-Loop Architecture for Elastic Degradation in Distributed Optimization*
 (Haoran Zhang, Lining Xing et al., 2025).
