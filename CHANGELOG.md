@@ -30,7 +30,7 @@ The list below is the planned content of the first release (`v0.1.0`).
   + every figure with a single command.
 * `scripts/make_figures.py`: 13 vector PDFs covering the paper's
   figures plus a high-fidelity diagnostic plot.
-* 57 pytest tests: per-module unit tests, closed-loop integration,
+* 58 pytest tests: per-module unit tests, closed-loop integration,
   CLI dispatch coverage, scenario-builder boundary tests, and
   ordering-inequality regression tests for the §5.4.1 comparative
   study and §5.3 ablation (Oracle ≥ Proposed > all binary baselines;

@@ -23,7 +23,7 @@ Closed-Loop Architecture for Resilient Distributed Optimization*
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e .[dev,learning,plot]
-pytest                                       :: 57 tests, ~30 s
+pytest                                       :: 58 tests, ~3 min
 ruff check .                                 :: lint
 mypy src/dds_adapt                           :: type-check
 python scripts/reproduce.py --quick --seed 0 :: < 1 minute, smoke run
@@ -204,7 +204,7 @@ the JSON files alongside it.
 ## Tests
 
 ```cmd
-pytest          :: 57 tests covering every module, the closed loop, the CLI, scenario boundaries, and ordering-inequality regression of the comparative + ablation studies
+pytest          :: 58 tests covering every module, the closed loop, the CLI, scenario boundaries, and ordering-inequality regression of the comparative + ablation studies
 ruff check .    :: lint
 mypy src/dds_adapt :: type-check
 ```
