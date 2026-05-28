@@ -1,5 +1,5 @@
-# Locked dependency versions used to produce the numerical signal in
-# STATUS.md and the `results/seed0/` JSON files. Generated with
+# Locked dependency versions used to produce the reference numbers in
+# README.md and the `results/seed0/` JSON files. Generated with
 # `pip freeze` on a Windows + Python 3.13 venv after
 # `pip install -e .[dev,learning,plot]`.
 #

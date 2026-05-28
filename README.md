@@ -55,7 +55,7 @@ different cost-band denominator; see [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANC
 | Robust DO   | ~0.00       | —          | —         | 0               |
 | FDI-Reconf  | ~0.00       | —          | —         | ~225            |
 | D-S Fusion  | ~0.00       | —          | —         | ~243            |
-| Byzantine   | ~0.01       | —          | —         | —               |
+| Byzantine   | ~0.00       | —          | —         | —               |
 
 Ordering: Oracle ≥ Proposed > everything else; D-S detection delayed
 relative to FDI; MAE / τ NaN for methods that do not estimate
