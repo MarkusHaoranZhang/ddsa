@@ -175,25 +175,7 @@ class BaselineDSFusion:
         return np.clip(out, 0.0, 1.0)
 
 
-# -------------------------------------------------------- Oracle
-class BaselineOracle:
-    """Oracle: gets the ground-truth health vector for free.
-
-    Kept as a standalone class so unit tests can construct one without
-    booting the runner; the comparative study runs Oracle through the
-    closed-loop engine via a health-estimate override.
-    """
-
-    def __init__(
-        self,
-        n_agents: int,
-        dim: int,
-        W: np.ndarray,
-        alpha: float = Config.ALPHA_NUM,
-        rng: np.random.Generator | None = None,
-    ) -> None:
-        self.n = n_agents
-        self.dim = dim
-        self.W = W
-        self.alpha = alpha
-        self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
+# Note: there is intentionally no ``BaselineOracle`` class. Oracle in
+# this codebase means "run the closed-loop engine with the true health
+# vector as override", which is just a one-line call inside
+# ``ExperimentRunner.run_oracle``; a class would only add ceremony.

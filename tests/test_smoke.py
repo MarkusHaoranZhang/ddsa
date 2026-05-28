@@ -8,15 +8,10 @@ from dds_adapt.baselines import (
     BaselineByzantineResilient,
     BaselineDSFusion,
     BaselineFDIReconf,
-    BaselineOracle,
     BaselineRobustDO,
 )
 from dds_adapt.config import Config
-from dds_adapt.cost import (
-    formation_cost,
-    formation_gradient,
-    local_cost_grad,
-)
+from dds_adapt.cost import local_cost_grad
 from dds_adapt.diagnostic import RPSDiagnosticModule
 from dds_adapt.engine import run_closed_loop
 from dds_adapt.metrics import compute_metrics
@@ -173,7 +168,6 @@ def test_baselines_instantiate():
     BaselineFDIReconf(n, 2, W)
     BaselineByzantineResilient(n, 2, W)
     BaselineDSFusion(n)
-    BaselineOracle(n, 2, W)
 
 
 # ----------------------------------------------------- metrics
@@ -210,12 +204,17 @@ def test_metrics_keys_present():
 
 
 def test_cost_and_gradient_finite():
+    """Sanity: the global cost is finite at a perturbed reference state."""
     np.random.seed(0)
     n = 4
     desired = np.random.randn(n, 2)
-    x = np.random.randn(4)
-    c = formation_cost(x, 0, 0.7, desired)
-    g = formation_gradient(x, 0, 0.7, desired)
+    X = desired + np.random.randn(n, 2) * 0.05
+    edges = Config.edges(n)
+    health = np.array([0.7, 1.0, 1.0, 1.0])
+    from dds_adapt.cost import formation_cost_global
+
+    c = formation_cost_global(X, health, desired, edges)
+    g = local_cost_grad(X, 0, health, desired, edges)
     assert np.isfinite(c)
     assert np.all(np.isfinite(g))
 

@@ -65,40 +65,6 @@ def formation_cost_global(
     return float(tracking + coupling + reg)
 
 
-def formation_grad_global(
-    X: np.ndarray,
-    health: np.ndarray,
-    desired_positions: np.ndarray,
-    edges: list[tuple[int, int]],
-    beta: float = Config.BETA,
-    gamma: float = Config.GAMMA_NUM,
-    safe_offset: float = Config.SAFE_OFFSET,
-) -> np.ndarray:
-    """Per-agent gradient of :func:`formation_cost_global`.
-
-    Returns an ``(N, 2)`` array whose ``i``-th row is
-    :math:`\\nabla_{x_i} \\tilde F`. Each agent's gradient depends on its
-    neighbours' positions through the coupling term; this is the
-    inter-agent coupling that makes the consensus cost non-trivial and
-    therefore makes ``health`` actually move the optimum.
-    """
-    n = len(desired_positions)
-    safe = _safe_anchor(desired_positions, safe_offset)
-    grad = np.zeros_like(X)
-
-    for i in range(n):
-        grad[i] = health[i] * (X[i] - desired_positions[i])
-        grad[i] += (1.0 - health[i]) * gamma * (X[i] - safe[i])
-
-    for i, j in edges:
-        d_ij = desired_positions[i] - desired_positions[j]
-        diff = X[i] - X[j] - d_ij
-        grad[i] += beta * diff
-        grad[j] -= beta * diff
-
-    return grad
-
-
 def local_cost_grad(
     X: np.ndarray,
     agent_idx: int,
@@ -114,9 +80,9 @@ def local_cost_grad(
     The decomposition splits the global cost into agent-owned pieces:
     agent ``i`` owns its own tracking + safe-anchor terms, and every
     edge ``(a, b)`` with ``a < b`` is owned by its smaller endpoint.
-    Summing ``local_cost_grad`` over all agents reproduces
-    :func:`formation_grad_global` exactly, which is the standing
-    requirement of distributed optimisation.
+    Summing ``local_cost_grad`` over all agents reproduces the
+    centralised gradient of :func:`formation_cost_global` exactly,
+    which is the standing requirement of distributed optimisation.
 
     The returned array has the same shape ``(N, 2)`` as the global
     state ``X``, with non-zero entries only on the rows of agents
@@ -139,35 +105,3 @@ def local_cost_grad(
             g[a] += beta * diff
             g[b] -= beta * diff
     return g
-
-
-# ---------------- Backward-compatible per-agent helpers --------------
-def formation_cost(
-    x_i: np.ndarray,
-    i: int,
-    h_i: float,
-    desired_positions: np.ndarray,
-    safe_offset: float = Config.SAFE_OFFSET,
-) -> float:
-    """Tracking + safe-anchor terms for a single agent (no coupling)."""
-    desired = desired_positions[i]
-    safe = desired + safe_offset
-    tracking = 0.5 * np.linalg.norm(x_i[:2] - desired) ** 2
-    regulariser = 0.5 * Config.GAMMA_NUM * np.linalg.norm(x_i[:2] - safe) ** 2
-    return float(h_i * tracking + (1 - h_i) * regulariser)
-
-
-def formation_gradient(
-    x_i: np.ndarray,
-    i: int,
-    h_i: float,
-    desired_positions: np.ndarray,
-    safe_offset: float = Config.SAFE_OFFSET,
-) -> np.ndarray:
-    """Single-agent gradient (no coupling). Kept for tests + simple drivers."""
-    grad = np.zeros_like(x_i)
-    desired = desired_positions[i]
-    safe = desired + safe_offset
-    grad[:2] = h_i * (x_i[:2] - desired)
-    grad[:2] += (1 - h_i) * Config.GAMMA_NUM * (x_i[:2] - safe)
-    return grad

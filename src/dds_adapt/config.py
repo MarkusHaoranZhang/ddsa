@@ -15,13 +15,14 @@ class Config:
 
     # ---- Tracks ---------------------------------------------------------
     NUM_SATELLITES: int = 8           # numerical track
-    LEO_ALTITUDE: float = 500.0       # km
     NUM_SATELLITES_HF: int = 3        # high-fidelity (NASA 42) track
 
     # ---- Cost function --------------------------------------------------
+    # MU and L_SMOOTH are the strong-convexity / smoothness constants of
+    # the per-agent quadratic tracking term in §5.1.1; they parametrise
+    # the rho_max bound in Theorem 1 (see rho_max_calibration.py).
     MU: float = 1.0
     L_SMOOTH: float = 1.0
-    KAPPA: float = 1.0
     BETA: float = 0.5
     SAFE_OFFSET: float = 0.3  # x_i^0 = x_i^des + SAFE_OFFSET (Section 3.2)
 
@@ -55,7 +56,6 @@ class Config:
 
     # ---- Statistics -----------------------------------------------------
     N_RUNS: int = 30
-    P_VALUE: float = 0.05
     ONSET_WINDOW: tuple[int, int] = (50, 150)
 
     # ---- Sensors --------------------------------------------------------
