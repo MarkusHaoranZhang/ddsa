@@ -173,14 +173,16 @@ writes:
 
 ```
 results/seed0/
-  meta.json          git commit, Python + dependency versions, config
-  comparative.json   §5.4.1
-  scenario2.json     §5.4.2
-  ablation.json      §5.3
-  topology.json      §5.5.1
-  concurrent.json    §5.5.2
-  scale.json         §5.5.3
-  learning.json      §5.5.4
+  meta.json              git commit, Python + dependency versions, config
+  comparative.json       §5.4.1
+  scenario2.json         §5.4.2
+  ablation.json          §5.3
+  topology.json          §5.5.1
+  concurrent.json        §5.5.2
+  scale.json             §5.5.3
+  learning.json          §5.5.4
+  high_fidelity.json     §5.1.1 high-fidelity track diagnostic
+  rho_calibration.json   §5.2.1 ρ_max sweep
 figures/
   fig_architecture.pdf
   fig_convergence_rate.pdf
@@ -211,7 +213,8 @@ mypy src/ddsa   :: type-check
 
 ## Limitations
 
-See `STATUS.md` and `KNOWN_DISCREPANCIES.md`. The biggest items:
+See [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md) for the full
+ledger. The biggest items:
 
 * The NASA 42 high-fidelity track ships a Python stand-in; the real
   binary is open source (NOSA) and can be swapped in via the engine's
