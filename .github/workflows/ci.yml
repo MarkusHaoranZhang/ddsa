@@ -34,6 +34,15 @@ jobs:
         run: ruff check .
 
       - name: Type-check (mypy)
+        # mypy is run only on Python 3.12, where pip resolves numpy 2.x.
+        # The project supports numpy >= 1.24 at runtime (see pyproject),
+        # but numpy 1.x ships less precise ndarray stubs (rank / dtype
+        # erased), which makes assignments to typed arrays report
+        # spurious ``[assignment]`` errors. The strict-mode static check
+        # is meaningful only on the 2.x stubs the codebase was authored
+        # against. Runtime compatibility with numpy 1.x is still
+        # verified by the pytest / smoke steps below on py3.10.
+        if: matrix.python-version == '3.12'
         run: mypy src/ddsa
 
       - name: Test (pytest)

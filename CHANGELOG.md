@@ -37,12 +37,18 @@ cited by DOI alongside the manuscript.
   Full > Variant A; Variant E ≈ 0). Line coverage is 93% overall;
   uncovered surface is concentrated in `learning_baseline.py`
   (sklearn-only path, exercised by `reproduce.py` not pytest).
-* `mypy --strict` clean across all 18 source files (the only
-  disabled check is `no-any-return`, an artefact of numpy's
-  partial generic stubs rather than a project-side issue).
+* `mypy --strict` clean across all 18 source files. Two non-default
+  checks are disabled: `no-any-return` (numpy operations return `Any`
+  because the stubs do not preserve dtype) and `type-arg` (numpy 1.x
+  stubs require fully-parameterised `ndarray` annotations, numpy 2.x
+  relaxes this; the project supports both).
 * GitHub Actions CI (`.github/workflows/ci.yml`) running ruff +
-  mypy + pytest + a `reproduce.py --quick` end-to-end smoke on
-  Ubuntu and Windows for Python 3.10 / 3.12.
+  pytest + a `reproduce.py --quick` end-to-end smoke on Ubuntu and
+  Windows for Python 3.10 / 3.12. `mypy --strict` runs on Python 3.12
+  only because numpy 1.x stubs (which pip resolves on 3.10) are too
+  imprecise on `ndarray` shape/dtype to support strict assignment
+  checking; runtime numpy 1.x compatibility is still covered by
+  pytest and the smoke step on the 3.10 matrix entries.
 * `STATUS.md` and `KNOWN_DISCREPANCIES.md` documenting per-claim
   mapping between paper assertions and code outputs.
 
