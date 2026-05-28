@@ -90,9 +90,8 @@ the τ-b formula on a 2-fault vector.
   consensus-error / formation-tracking metric. The code reports
   utilisation, which is computed against an Oracle reference that
   bakes in the true health and is dominated by the fault response
-  rather than by the topology damage. Edge-removal aggressiveness was
-  swept (4, 12 edges) without separating the modes; sweeping the
-  metric instead is the open work item.
+  rather than by the topology damage. Sweeping the metric instead
+  is the open work item.
 * **Statistical significance markers** (`*` and `†` in Table 5–7): the
   paper applies a paired t-test at p<0.05; the code reports mean ± std
   but does not annotate significance. Adding the markers is mechanical

@@ -49,9 +49,9 @@ The list below is the planned content of the first release (`v0.1.0`).
 ### Notes for reviewers
 
 * `requirements-lock.txt` records the exact versions used to
-  produce the numerical signal reported in `STATUS.md`. CI tests
-  against fresher versions; the lock is for byte-identical
-  reproduction only.
+  produce the reference numbers in `README.md` and the JSON files
+  under `results/seed0/`. CI tests against fresher versions; the
+  lock is for byte-identical reproduction only.
 * The high-fidelity track ships a Python stand-in. NASA 42 itself
   is open source under the NASA Open Source Agreement (NOSA), and
   `engine.run_closed_loop` accepts a `simulator_factory` so a

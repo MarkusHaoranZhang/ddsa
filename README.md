@@ -1,7 +1,7 @@
 # Diagnosis-Driven Structural Adaptation
 
 Companion code for *Diagnosis-Driven Structural Adaptation: A
-Closed-Loop Architecture for Resilient Distributed Optimization*
+Closed-Loop Architecture for Elastic Degradation in Distributed Optimization*
 (Haoran Zhang, Lining Xing et al., 2025).
 
 > **Read first**: [`STATUS.md`](STATUS.md) lists every paper section
@@ -25,7 +25,7 @@ python -m venv .venv
 pip install -e .[dev,learning,plot]
 pytest                                       :: 58 tests, ~3 min
 ruff check .                                 :: lint
-mypy src/ddsa                           :: type-check
+mypy src/ddsa                                :: type-check
 python scripts/reproduce.py --quick --seed 0 :: < 1 minute, smoke run
 ```
 
@@ -70,8 +70,8 @@ continuous health.
 | Variant D (binary)      | ~0.34       | 0.06       | 1.00        |
 | Variant E (no adapt)    | ~0.00       | 0.06       | —           |
 
-The full table (six variants and per-metric standard deviation) is in
-[`STATUS.md`](STATUS.md).
+The full per-metric standard deviation is in
+[`results/seed0/ablation.json`](results/seed0/ablation.json).
 
 ## Hello, world
 
@@ -206,7 +206,7 @@ the JSON files alongside it.
 ```cmd
 pytest          :: 58 tests covering every module, the closed loop, the CLI, scenario boundaries, and ordering-inequality regression of the comparative + ablation studies
 ruff check .    :: lint
-mypy src/ddsa :: type-check
+mypy src/ddsa   :: type-check
 ```
 
 ## Limitations
