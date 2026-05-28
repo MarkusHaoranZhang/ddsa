@@ -67,7 +67,7 @@ continuous health.
 | Variant A (D-S in loop) | ~0.00       | 0.17       | 0.50        |
 | Variant B (Average)     | ~0.47       | 0.07       | 0.50        |
 | Variant C (No Sinkhorn) | ~0.71       | 0.06       | 0.50        |
-| Variant D (binary)      | ~0.03       | 0.06       | 1.00        |
+| Variant D (binary)      | ~0.34       | 0.06       | 1.00        |
 | Variant E (no adapt)    | ~0.00       | 0.06       | —           |
 
 The full table (six variants and per-metric standard deviation) is in
