@@ -77,6 +77,22 @@ the τ-b formula on a 2-fault vector.
 
 ## What the code does not test independently
 
+* **§3.2 RPSGM support function — GDM substitution**: the paper builds
+  the per-configuration support score as
+  `s_A = -log D(R_i, E[r|A])`, with `D` the energy distance between an
+  observed residual window and the expected residual under hypothesis
+  `A`, the latter obtained from a linearised fault-to-residual matrix
+  `F_{i←j}`. The code computes the same support role through a
+  Gaussian discriminant model (`train_gdm` in `residual.py`,
+  `compute_memberships` in `diagnostic.py`): per-fault Gaussians are
+  fit offline from healthy/faulty residual blocks, and the resulting
+  membership posteriors play the role of the energy-distance support.
+  The two formulations rank focal elements consistently, but they are
+  not the same scoring function: the GDM path requires per-fault
+  training samples and so does not exercise the paper's claim that
+  the support is non-parametric. We document this as an
+  implementation choice rather than tune the energy-distance variant
+  to also reproduce.
 * **§3.2 Equation 6 constraint contraction**: the third structural-
   adaptation mechanism is in the paper but every experiment uses
   unconstrained quadratic costs. The paper itself acknowledges this in
