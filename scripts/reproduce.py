@@ -40,12 +40,22 @@ def _git_commit() -> str:
 
 def _python_packages() -> dict[str, str]:
     pkgs = {}
-    for name in ("numpy", "scipy", "scikit-learn", "matplotlib"):
+    # PyPI distribution name -> import module name. They differ for
+    # scikit-learn (PyPI: ``scikit-learn``, import: ``sklearn``); the
+    # earlier ``name.replace("-", "_")`` shortcut silently misreported
+    # sklearn as "not installed" in meta.json.
+    name_map = {
+        "numpy": "numpy",
+        "scipy": "scipy",
+        "scikit-learn": "sklearn",
+        "matplotlib": "matplotlib",
+    }
+    for dist_name, import_name in name_map.items():
         try:
-            mod = __import__(name.replace("-", "_"))
-            pkgs[name] = getattr(mod, "__version__", "?")
+            mod = __import__(import_name)
+            pkgs[dist_name] = getattr(mod, "__version__", "?")
         except ImportError:
-            pkgs[name] = "not installed"
+            pkgs[dist_name] = "not installed"
     return pkgs
 
 
