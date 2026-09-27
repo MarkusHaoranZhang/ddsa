@@ -3,7 +3,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20434143.svg)](https://doi.org/10.5281/zenodo.20434143)
 
 Companion code for *Diagnosis-Driven Structural Adaptation: A
-Closed-Loop Architecture for Elastic Degradation in Distributed Optimization*
+Closed-Loop Architecture for Elastic Degradation in Satellite Formation Control*
 (Haoran Zhang, Lining Xing et al., 2025).
 
 > **Read first**: [`STATUS.md`](STATUS.md) lists every paper section
@@ -15,7 +15,7 @@ Closed-Loop Architecture for Elastic Degradation in Distributed Optimization*
 > NASA 42 (open source under NOSA). This repository ships a
 > self-contained Python stand-in (`hf_simulator.py`) covering the same
 > physics (J2 + bearing friction + SRP + gravity gradient + residual
-> drag near perigee). The engine accepts a `simulator_factory`, so a
+> drag near perigee) at the paper's eight-satellite GTO scale. The engine accepts a `simulator_factory`, so a
 > wrapper around the real binary plugs in without touching the rest of
 > the pipeline.
 
@@ -51,7 +51,7 @@ different cost-band denominator; see [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANC
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
 | Oracle      | 1.00        | 0.00       | 1.00      | ~25             |
-| Proposed    | ~0.71       | 0.06       | ~0.50     | 0               |
+| Proposed    | ~0.75       | 0.06       | ~0.50     | 0               |
 | Robust DO   | ~0.00       | —          | —         | 0               |
 | FDI-Reconf  | ~0.00       | —          | —         | ~225            |
 | D-S Fusion  | ~0.00       | —          | —         | ~243            |
@@ -65,11 +65,11 @@ continuous health.
 
 | Variant                 | Utilisation | Health MAE | Kendall τ   |
 |-------------------------|-------------|------------|-------------|
-| Full framework          | ~0.71       | 0.06       | 0.50        |
+| Full framework          | ~0.75       | 0.06       | 0.50        |
 | Variant A (D-S in loop) | ~0.00       | 0.17       | 0.50        |
-| Variant B (Average)     | ~0.47       | 0.07       | 0.50        |
-| Variant C (No Sinkhorn) | ~0.71       | 0.06       | 0.50        |
-| Variant D (binary)      | ~0.34       | 0.06       | 1.00        |
+| Variant B (Average)     | ~0.46       | 0.07       | 0.50        |
+| Variant C (No Sinkhorn) | ~0.75       | 0.06       | 0.50        |
+| Variant D (binary)      | ~0.17       | 0.06       | 1.00        |
 | Variant E (no adapt)    | ~0.00       | 0.06       | —           |
 
 The full per-metric standard deviation is in

@@ -1,4 +1,4 @@
-"""High-fidelity track driver (Section 5.1.1, three-satellite GTO).
+"""High-fidelity track driver (Section 5.1.1, eight-satellite GTO).
 
 The high-fidelity track exists to *validate* that the diagnostic
 module's behaviour survives realistic disturbances (J2, solar pressure,

@@ -11,7 +11,7 @@ Per-claim mapping of paper assertions to what the code produces on
   D-S detection at tick ~243, FDI at tick ~225 (Δ ≈ 18 ticks; paper
   ~30). Direction matches. ✅
 * **§5.3.1 RPS vs D-S ablation**: Full ≫ Variant A on utilisation
-  (0.71 vs 0.00); the utilisation gap is the central claim of
+  (0.75 vs 0.00); the utilisation gap is the central claim of
   §5.3.1. ✅
 * **§5.3.2 adaptation is necessary**: Variant E (no adaptation) ≈ 0
   utilisation; Full clearly above. ✅
@@ -24,21 +24,21 @@ Per-claim mapping of paper assertions to what the code produces on
   the model-based method does not**: in-distribution MAE 0.009,
   out-of-distribution MAE 0.016 (≈ 80% relative drop). ✅
 * **§5.1.1 high-fidelity track diagnosis (NASA 42 stand-in)**:
-  τ = +0.82, MAE = 0.23, detection at tick −1 (i.e. at the very
-  first diagnosis tick). ✅
+  τ = +0.50, MAE = 0.08, detection at tick −43, on the revised
+  eight-satellite GTO scale. ✅
 
 ## What the code does not match in absolute magnitude
 
 | Quantity | Paper | Code (n_runs = 30, seed = 0) | Note |
 |---|---|---|---|
-| Proposed utilisation (§5.4.1) | 0.78 ± 0.04 | 0.71 ± 0.09 | within 10% |
+| Proposed utilisation (§5.4.1) | 0.78 ± 0.04 | 0.75 ± 0.09 | within 5% |
 | FDI utilisation (§5.4.1) | 0.55 | ~0.00 | denominator mismatch |
 | D-S Fusion utilisation (§5.4.1) | 0.61 | ~0.00 | denominator mismatch |
 | Robust DO utilisation (§5.4.1) | 0.31 | ~0.00 | denominator mismatch |
 | Oracle utilisation (§5.4.1) | 0.85 | 1.00 | clipped to 1 by definition |
 | Proposed Kendall τ (§5.4.1) | 0.91 | ~0.50 | scope mismatch (see below) |
 | ρ_max margin (§5.2.1) | ~20% | ~25000% | constant / norm definition mismatch (open) |
-| Topology damage spread (§5.5.1) | random < high_weight < adjacent | all three ≈ 0.41 (no spread) | metric scope mismatch (see below) |
+| Topology damage spread (§5.5.1) | random < high_weight < adjacent | all three ≈ 0.30 (no spread) | metric scope mismatch (see below) |
 
 ### Where the absolute scale offset comes from
 
@@ -93,10 +93,15 @@ the τ-b formula on a 2-fault vector.
   the support is non-parametric. We document this as an
   implementation choice rather than tune the energy-distance variant
   to also reproduce.
-* **§3.2 Equation 6 constraint contraction**: the third structural-
-  adaptation mechanism is in the paper but every experiment uses
-  unconstrained quadratic costs. The paper itself acknowledges this in
-  §5.6.3 Limitations.
+* **§3.2 constraint contraction — retired in the revision**: the
+  original submission's third structural-adaptation mechanism
+  (health-dependent constraint sets) has been removed from the revised
+  manuscript, which now uses two mechanisms only (cost reweighting and
+  communication-weight attenuation). This release matches the revised
+  formulation: the regulariser anchors every agent at the shared
+  nominal target ``x^nom`` common to all agents (the per-agent safe
+  state of the original formulation is gone), and no constraint
+  handling is claimed.
 * **§5.4.2 communication-loss FDI trigger at 40% packet loss**: code's
   FDI uses a residual-energy threshold and does not currently re-trigger
   on link loss; we report this as a known mismatch rather than a hidden

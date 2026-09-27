@@ -258,10 +258,10 @@ def test_collect_residual_samples_shape():
 def test_hf_simulator_step_finite():
     from ddsa.hf_simulator import NASA42StandInSimulator
 
-    sim = NASA42StandInSimulator(n_satellites=3, dt=1.0, seed=0)
+    sim = NASA42StandInSimulator(dt=1.0, seed=0)
     cmd = sim.commanded_control(sim.desired_positions)
     state, realised, residual = sim.step(cmd)
-    assert state.shape == (3, 6)
+    assert state.shape == (Config.NUM_SATELLITES_HF, 6)
     assert np.all(np.isfinite(state))
     assert np.all(np.isfinite(residual))
 
@@ -272,7 +272,7 @@ def test_hf_runner_returns_finite_metrics():
     out = run_hf_diagnostic_experiment(n_steps=80, seed=0)
     assert np.isfinite(out.health_mae)
     assert -1.0 <= out.kendall_tau <= 1.0
-    assert out.mean_estimate_per_agent.shape == (3,)
+    assert out.mean_estimate_per_agent.shape == (Config.NUM_SATELLITES_HF,)
 
 
 def test_rho_max_calibration_returns_numbers():

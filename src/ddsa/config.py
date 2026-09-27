@@ -15,7 +15,7 @@ class Config:
 
     # ---- Tracks ---------------------------------------------------------
     NUM_SATELLITES: int = 8           # numerical track
-    NUM_SATELLITES_HF: int = 3        # high-fidelity (NASA 42) track
+    NUM_SATELLITES_HF: int = 8        # high-fidelity (NASA 42) track
 
     # ---- Cost function --------------------------------------------------
     # MU and L_SMOOTH are the strong-convexity / smoothness constants of
@@ -24,7 +24,7 @@ class Config:
     MU: float = 1.0
     L_SMOOTH: float = 1.0
     BETA: float = 0.5
-    SAFE_OFFSET: float = 0.3  # x_i^0 = x_i^des + SAFE_OFFSET (Section 3.2)
+    NOMINAL_TARGET: tuple[float, float] = (0.0, 0.0)  # shared x^nom, common to all agents (Section 3.2, Eq. 2)
 
     # ---- Optimisation step sizes ---------------------------------------
     ALPHA_NUM: float = 0.01

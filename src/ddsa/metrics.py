@@ -56,9 +56,9 @@ def compute_metrics(
                 - x_final[j, :2]
                 - (desired_positions[i] - desired_positions[j])
             )
-            # The 2.0 m tolerance is twice the unit formation radius
-            # (Config.SAFE_OFFSET-scale): a pair is "in formation" if
-            # its inter-agent error is below 2x the nominal spacing.
+            # The 2.0 m tolerance is twice the unit formation radius:
+            # a pair is "in formation" if its inter-agent error is
+            # below 2x the nominal spacing.
             if error <= 2.0:
                 constraints_satisfied += 1
     total_pairs = n_agents * (n_agents - 1) / 2

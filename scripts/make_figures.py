@@ -414,7 +414,7 @@ def fig_scalability(out_dir: Path, seed: int, quick: bool):
 
 # ----------------------------------------------------- 13. high-fidelity track
 def fig_high_fidelity(out_dir: Path, seed: int, quick: bool):
-    """Diagnostic accuracy on the NASA 42 stand-in (3-sat GTO)."""
+    """Diagnostic accuracy on the NASA 42 stand-in (8-sat GTO)."""
     hf = run_hf_diagnostic_experiment(
         n_steps=200 if quick else 600, seed=seed
     )

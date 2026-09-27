@@ -5,6 +5,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+* Structural adaptation now anchors degraded agents at the **shared
+  nominal target** ``x^nom`` common to all agents, matching the revised
+  manuscript; the per-agent safe state of v0.1.0 was removed. The
+  reference numbers in ``README.md`` and ``KNOWN_DISCREPANCIES.md``
+  were regenerated at seed 0 accordingly.
+* High-fidelity stand-in default scale is now **eight satellites**
+  (``Config.NUM_SATELLITES_HF``), matching the revised manuscript's
+  NASA 42 track; ``high_fidelity.json`` and ``fig_high_fidelity.pdf``
+  were regenerated at seed 0.
+* Repository titles updated to the submission title (…*in Satellite
+  Formation Control*) across README, STATUS, and CITATION.cff.
+
 ### Fixed
 
 * CI type-check — the mypy target moves from Python 3.10 to 3.12:

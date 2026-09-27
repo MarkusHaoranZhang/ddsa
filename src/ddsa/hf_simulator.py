@@ -1,6 +1,6 @@
 """High-fidelity stand-in for the NASA 42 spacecraft simulator.
 
-Section 5.1.1 of the paper describes a three-satellite GTO formation
+Section 5.1.1 of the paper describes an eight-satellite GTO formation
 simulated in NASA 42, a public-domain C codebase published by the
 Goddard Space Flight Center. The 42 binary cannot be redistributed
 inside a Python package, so this module provides a self-contained
@@ -23,7 +23,7 @@ with a thin wrapper that drops the same ``commanded_control``,
 ``sample_residual``, and ``step`` interface the engine expects.
 
 Numerical values follow the paper where given; otherwise we use values
-consistent with a 3-satellite GTO mission analysis.
+consistent with an eight-satellite GTO mission analysis.
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def _rk4(state: np.ndarray, dt: float) -> np.ndarray:
 
 
 class NASA42StandInSimulator:
-    """Stand-in 3-satellite GTO simulator with reaction-wheel actuators.
+    """Stand-in eight-satellite GTO simulator with reaction-wheel actuators.
 
     The state per satellite is ``[r_x, r_y, r_z, v_x, v_y, v_z]`` in the
     Earth-centred inertial frame. ``health[i] in [0, 1]`` rescales the
@@ -129,7 +129,7 @@ class NASA42StandInSimulator:
         self.health = np.ones(n_satellites)
         self._rng = np.random.default_rng(seed)
 
-        # initialise three satellites at perigee with small along-track offsets
+        # initialise the satellites at perigee with small along-track offsets
         self.state = np.zeros((n_satellites, 6))
         nu0 = 0.0  # true anomaly at start
         for k in range(n_satellites):

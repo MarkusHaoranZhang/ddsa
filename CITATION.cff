@@ -50,7 +50,7 @@ preferred-citation:
   type: article
   title: >-
     Diagnosis-Driven Structural Adaptation: A Closed-Loop
-    Architecture for Elastic Degradation in Distributed Optimization
+    Architecture for Elastic Degradation in Satellite Formation Control
   authors:
     - given-names: Haoran
       family-names: Zhang
