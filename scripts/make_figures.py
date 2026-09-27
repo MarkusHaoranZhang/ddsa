@@ -31,7 +31,6 @@ from ddsa.runner import ExperimentRunner
 from ddsa.scenarios import (
     actuator_degradation_profile,
     communication_loss_w_sequence,
-    concurrent_degradation_profile,
     perturb_topology,
 )
 
@@ -371,7 +370,7 @@ def fig_topology(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool
 # ----------------------------------------------------- 11. multi-fault
 def fig_multi_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 600 if not quick else 200
-    profile, _ = concurrent_degradation_profile(runner.n, n_steps, onset_time=80, rng=np.random.default_rng(seed))
+    profile, _ = runner.concurrent_degradation_profile(n_steps, onset_time=80, seed=seed)
     _, log = runner.run_proposed(profile, seed)
     h_true = np.stack(log.true_health)
     h_est = np.stack(log.health_est)

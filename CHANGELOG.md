@@ -3,6 +3,20 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+* `scripts/make_figures.py` — `fig_multi_fault` called the
+  deterministic `scenarios.concurrent_degradation_profile` with an
+  unsupported `rng` keyword, which aborted `reproduce.py` (and any
+  figure regeneration) before `fig_multi_fault`, `fig_scalability`,
+  and `fig_high_fidelity` were written. It now calls
+  `runner.concurrent_degradation_profile(..., seed=seed)`, the
+  runner wrapper that absorbs the seed. Verified with
+  `python scripts/reproduce.py --quick --seed 0`, which now writes
+  all 13 figures.
+
 ## [0.1.0] - 2026-05-29
 
 First public release. Companion code for the paper, intended to be
