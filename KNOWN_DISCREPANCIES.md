@@ -106,6 +106,10 @@ the τ-b formula on a 2-fault vector.
   FDI uses a residual-energy threshold and does not currently re-trigger
   on link loss; we report this as a known mismatch rather than a hidden
   bug.
+* **§5.5.3 step fault**: the stand-in does not implement the revised
+  manuscript's step-fault experiment, in particular the
+  residual-threshold early diagnostic update; the step-fault study
+  (and its figure) is therefore outside this release.
 * **§5.5.1 topology mode separation**: paper distinguishes random vs
   high-weight vs adjacent edge removal by their effect on a
   consensus-error / formation-tracking metric. The code reports
