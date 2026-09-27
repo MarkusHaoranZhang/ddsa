@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* CI type-check — the mypy target moves from Python 3.10 to 3.12:
+  numpy >= 2.5 stubs use PEP 695 ``type`` statements that mypy cannot
+  parse under a sub-3.12 target, which failed the CI py3.12 cells at
+  the type-check step. One ``np.linalg.norm`` accumulation in
+  ``cost.py`` is coerced to ``float`` so the file type-checks under
+  both mypy 2.1 (numpy 2.4 stubs) and mypy 2.3 (numpy 2.5 stubs).
 * `scripts/make_figures.py` — `fig_multi_fault` called the
   deterministic `scenarios.concurrent_degradation_profile` with an
   unsupported `rng` keyword, which aborted `reproduce.py` (and any

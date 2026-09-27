@@ -54,7 +54,13 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.mypy]
-python_version = "3.10"
+# Static-check target is Python 3.12, matching the CI job that runs
+# mypy. numpy >= 2.5 ships PEP 695 ``type`` statements in its stubs,
+# which mypy cannot parse under a 3.10/3.11 target (CI py3.12 cells
+# resolve numpy 2.5+; the py3.10 cells resolve an older numpy and skip
+# mypy entirely). Runtime support for Python 3.10/3.11 is covered by
+# pytest and the reproduce smoke run on their CI cells.
+python_version = "3.12"
 files = ["src/ddsa"]
 strict = true
 # numpy operations (mean, copy, clip, ...) return ``Any`` because numpy

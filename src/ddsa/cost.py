@@ -59,7 +59,7 @@ def formation_cost_global(
     coupling = 0.0
     for i, j in edges:
         d_ij = desired_positions[i] - desired_positions[j]
-        coupling += np.linalg.norm(X[i] - X[j] - d_ij) ** 2
+        coupling += float(np.linalg.norm(X[i] - X[j] - d_ij) ** 2)
     coupling *= 0.5 * beta
 
     return float(tracking + coupling + reg)
