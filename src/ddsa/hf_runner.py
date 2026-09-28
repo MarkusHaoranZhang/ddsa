@@ -43,6 +43,13 @@ def _energy_3d(residual: np.ndarray) -> np.ndarray:
     return np.linalg.norm(residual, axis=1)
 
 
+# Fault-health levels of the HF historical envelope. Kept separate from
+# the numerical track's ``Config.FAULT_HEALTHS``; ``diagnostic.fit``
+# receives them explicitly so the severity regression splits the HF
+# blocks by their own level count.
+HF_FAULT_HEALTHS: tuple[float, ...] = (0.7, 0.5, 0.3, 0.1)
+
+
 def _collect_hf_samples(
     sim: NASA42StandInSimulator,
     n_samples: int,
@@ -70,7 +77,7 @@ def _collect_hf_samples(
 def train_gdm_hf(
     n_agents: int = Config.NUM_SATELLITES_HF,
     n_samples: int = Config.N_TRAIN_SAMPLES,
-    fault_healths: tuple[float, ...] = (0.7, 0.5, 0.3, 0.1),
+    fault_healths: tuple[float, ...] = HF_FAULT_HEALTHS,
     seed: int = 0,
 ) -> tuple[np.ndarray, list[np.ndarray]]:
     """Build a healthy / per-fault training set using the HF stand-in."""

@@ -67,6 +67,7 @@ class EngineLog:
     comm_rounds_per_diag: list[int] = field(default_factory=list)
     wall_time_per_diag: list[float] = field(default_factory=list)
     detection_tick: int | None = None  # first tick where any h_hat < 0.9
+    early_trigger_tick: int | None = None  # first in-interval trigger tick
 
 
 def run_closed_loop(
@@ -88,8 +89,12 @@ def run_closed_loop(
     detection_threshold: float = 0.9,
     health_estimate_override: np.ndarray | None = None,
     w_base_per_interval: list[np.ndarray] | None = None,
+    edges_per_interval: list[list[tuple[int, int]]] | None = None,
+    early_trigger_threshold: float | None = None,
+    early_trigger_check_every: int = 5,
     simulator_factory: Callable[[], _SimulatorProtocol] | None = None,
     isolation_mask: np.ndarray | None = None,
+    isolation_pins: np.ndarray | None = None,
 ) -> EngineLog:
     """Run the full closed loop and return the recorded telemetry.
 
@@ -102,16 +107,39 @@ def run_closed_loop(
     graph at every diagnostic interval; this is what scenario 2 needs to
     inject communication-link degradation. If the list is shorter than
     ``n_diag_intervals`` the trailing intervals fall back to
-    ``W_base``.
+    ``W_base``.     ``edges_per_interval`` is the matching formation-edge
+    schedule: removing a physical inter-satellite link drops both its
+    communication weight and its formation-keeping coupling term, which
+    is what makes the topology study respond to link removal at all
+    (the per-agent tracking term alone would keep the formation pinned
+    regardless of the graph).
+
+    ``early_trigger_threshold`` activates the step-fault early trigger:
+    every ``early_trigger_check_every`` simulation steps inside a
+    diagnosis interval the engine samples the residual probe and, if
+    any agent's residual energy exceeds the threshold (the signature of
+    an abrupt capability drop), re-diagnoses immediately, re-adapts the
+    mixing matrix, and warm-starts DIGing to refresh the steering
+    target for the rest of the interval. This is the paper's
+    "continuous residual monitoring triggers an early health update";
+    it fires at most once per interval.
 
     ``isolation_mask`` is a per-tick boolean ``(n_diag_intervals, n)``
     matrix; an agent flagged ``True`` at a given tick is treated as
-    physically removed from the formation: its position is held at the
-    formation reference and its cost contribution is taken from the
-    DIGing iterate but its row of the gradient is zeroed so subsequent
-    DIGing updates do not move it. FDI and threshold-based D-S use this
-    to model the paper's "recompute formation using only healthy agents"
-    semantics.
+    physically removed from the formation: its position is held and its
+    row of the gradient is zeroed so subsequent DIGing updates do not
+    move it. FDI and threshold-based D-S use this to model the paper's
+    "recompute formation using only healthy agents" semantics.
+
+    ``isolation_pins`` (shape ``(n_diag_intervals, n, 2)``) supplies the
+    hold position for flagged agents; when absent, flagged rows are
+    pinned to ``desired_positions`` (the historical behaviour). A
+    baseline that isolates an agent sets the pin once, at detection
+    time, and repeats it for every later interval: the reconfiguration
+    is a one-shot command, so the hold does not chase the decaying
+    health afterwards. That frozen hold is what separates a threshold
+    baseline's steady-state cost from the Oracle's continuously adapted
+    optimum.
     """
     n = W_base.shape[0]
     if health_profile.shape[0] != n:
@@ -189,46 +217,65 @@ def run_closed_loop(
             isolation_mask[k] if isolation_mask is not None and k < len(isolation_mask)
             else np.zeros(n, dtype=bool)
         )
+        edges_now = (
+            edges_per_interval[k]
+            if edges_per_interval is not None and k < len(edges_per_interval)
+            else edges
+        )
         active_edges = (
-            [(a, b) for (a, b) in edges if not iso_mask[a] and not iso_mask[b]]
-            if iso_mask.any() else edges
+            [(a, b) for (a, b) in edges_now if not iso_mask[a] and not iso_mask[b]]
+            if iso_mask.any() else edges_now
         )
 
-        def grad(
-            X: np.ndarray,
-            agent_idx: int,
-            _h: np.ndarray = h_hat,
-            _iso: np.ndarray = iso_mask,
-            _edges: list[tuple[int, int]] = active_edges,
-        ) -> np.ndarray:
-            # Default-arg capture (``_h=h_hat`` etc.) binds the current
-            # tick's values at *closure-creation* time. This avoids the
-            # late-binding pitfall where the ``grad`` callable would
-            # otherwise see whatever ``h_hat`` is when DIGing finally
-            # invokes it (i.e. the next tick's value).
-            #
-            # agent_idx-owned local cost gradient: own tracking + own
-            # safe-anchor + edges (agent_idx, j) for j > agent_idx,
-            # restricted to edges between two active agents.
-            g = local_cost_grad(
-                X, agent_idx, _h, desired_positions, _edges,
-                beta=beta, gamma=gamma,
-            )
-            if _iso[agent_idx]:
-                # an isolated agent contributes no force
-                g[:] = 0.0
-            return g
+        def make_grad(
+            h_curr: np.ndarray,
+            edges_curr: list[tuple[int, int]],
+            iso_curr: np.ndarray,
+        ) -> Callable[[np.ndarray, int], np.ndarray]:
+            """Bind a tick's health / edges into a DIGing gradient callable.
+
+            The default-arg capture avoids the late-binding pitfall where
+            the callable would otherwise see whatever ``h_hat`` is when
+            DIGing finally invokes it (i.e. the next tick's value). The
+            same factory is used again when an early trigger re-diagnoses
+            inside an interval.
+            """
+
+            def bound_grad(
+                X: np.ndarray,
+                agent_idx: int,
+                _h: np.ndarray = h_curr,
+                _iso: np.ndarray = iso_curr,
+                _edges: list[tuple[int, int]] = edges_curr,
+            ) -> np.ndarray:
+                g = local_cost_grad(
+                    X, agent_idx, _h, desired_positions, _edges,
+                    beta=beta, gamma=gamma,
+                )
+                if _iso[agent_idx]:
+                    # an isolated agent contributes no force
+                    g[:] = 0.0
+                return g
+
+            return bound_grad
+
+        grad = make_grad(h_hat, active_edges, iso_mask)
 
         if iso_mask.any():
-            # pin every agent's *estimate* of the isolated rows to the reference
+            # pin every agent's *estimate* of the isolated rows to the
+            # hold position: the per-interval pin if supplied, else the
+            # formation reference (historical behaviour).
+            hold = desired_positions
+            if isolation_pins is not None and k < len(isolation_pins):
+                hold = isolation_pins[k]
             for iso_idx in np.where(iso_mask)[0]:
-                optimiser.x[:, iso_idx, :] = desired_positions[iso_idx]
+                optimiser.x[:, iso_idx, :] = hold[iso_idx]
         _, hist = optimiser.optimize(grad, n_iters=iters_per_diag)
         # consensus estimate of the whole formation. Isolated rows are
-        # already pinned to the reference inside the optimiser state
+        # already pinned to the hold position inside the optimiser state
         # (above) and the gradient closure zeroes their force, so the
-        # mean across agent estimates returns the reference for those
-        # rows automatically.
+        # mean across agent estimates returns the hold for those rows
+        # automatically.
         X_consensus = optimiser.consensus_estimate()
         wall = time.perf_counter() - t0
         # Each agent steers toward its own row of the consensus formation;
@@ -237,9 +284,55 @@ def run_closed_loop(
         per_agent_target = X_consensus
 
         # ------------------ 5. apply optimiser output to physics --------
+        triggered = False
         for inner in range(diag_start + 1, diag_end):
             sim.set_health(health_profile[:, inner])
             sim.step(sim.commanded_control(per_agent_target))
+            if (
+                early_trigger_threshold is not None
+                and not triggered
+                and (inner - diag_start) % max(1, early_trigger_check_every) == 0
+            ):
+                energy = residual_energy(sim.sample_residual())
+                if float(np.max(energy)) > early_trigger_threshold:
+                    triggered = True
+                    if log.early_trigger_tick is None:
+                        log.early_trigger_tick = inner
+                    if health_estimate_override is not None:
+                        h_hat = np.clip(
+                            health_estimate_override[:, inner], 0.0, 1.0
+                        )
+                    else:
+                        R = broadcast_residual_matrix(
+                            energy, rng,
+                            cross_agent_noise_std=cross_agent_noise_std,
+                        )
+                        h_hat, _, _ = diagnostic.diagnose_round(R)
+                    if log.detection_tick is None and (
+                        h_hat < detection_threshold
+                    ).any():
+                        log.detection_tick = inner
+                    W_tilde = (
+                        adapt_mixing_matrix(W_base_now, h_hat)
+                        if use_w_adaptation else W_base_now
+                    )
+                    optimiser.set_mixing_matrix(W_tilde)
+                    new_edges = (
+                        edges_per_interval[k]
+                        if edges_per_interval is not None
+                        and k < len(edges_per_interval)
+                        else edges
+                    )
+                    new_active = (
+                        [(a, b) for (a, b) in new_edges
+                         if not iso_mask[a] and not iso_mask[b]]
+                        if iso_mask.any() else new_edges
+                    )
+                    optimiser.optimize(
+                        make_grad(h_hat, new_active, iso_mask),
+                        n_iters=iters_per_diag,
+                    )
+                    per_agent_target = optimiser.consensus_estimate()
 
         # ------------------ 6. log --------------------------------------
         log.true_health.append(h_true.copy())

@@ -163,7 +163,19 @@ class NASA42StandInSimulator:
 
     # ----------------------------------------------------- controls
     def commanded_control(self, target_positions: np.ndarray) -> np.ndarray:
-        """Position-keeping acceleration command (3-D, m/s^2)."""
+        """Position-keeping acceleration command (3-D, m/s^2).
+
+        Planar ``(N, 2)`` targets arrive from the cost-layer DIGing
+        loop, which works in the normalised configuration frame. The
+        stand-in has no Hill-Clohessy-Wiltshire mapping for that frame,
+        so the physical channel stays unactuated for planar targets;
+        the closed loop consumes only this simulator's residual
+        (probe) channel. The 3-D targets used by the diagnostic probe
+        take the normal control path.
+        """
+        target = np.asarray(target_positions, dtype=float)
+        if target.ndim == 2 and target.shape[1] == 2:
+            return np.zeros((self.n, 3))
         ctrl = np.zeros((self.n, 3))
         # constant bias to mimic continuous orbit-keeping (so residual is
         # informative even at the reference state)

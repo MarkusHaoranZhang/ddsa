@@ -118,34 +118,46 @@ def main() -> None:
     _dump(out_dir / "meta.json", meta)
 
     # --------- studies -----------
-    print("\n[1/6] Comparative study (Scenario 1)")
+    print("\n[1/8] Comparative study (Scenario 1)")
     comp = runner.run_comparative(n_runs=n_runs, n_steps=n_steps)
     _dump(out_dir / "comparative.json", comp)
     runner.print_results_table(comp, "Comparative")
 
-    print("\n[2/6] Ablation study")
+    print("\n[2/8] Ablation study")
     abl = runner.run_ablation(n_runs=n_runs, n_steps=n_steps)
     _dump(out_dir / "ablation.json", abl)
     runner.print_results_table(abl, "Ablation")
 
-    print("\n[3/6] Scenario 2: communication degradation")
+    print("\n[3/8] Scenario 2: communication degradation")
     s2 = runner.run_communication_scenario(n_runs=n_runs, n_steps=n_steps)
     _dump(out_dir / "scenario2.json", s2)
     runner.print_results_table(s2, "Scenario 2")
 
-    print("\n[4/6] Topology robustness")
+    print("\n[4/8] Topology robustness")
     topo = runner.run_topology_robustness(
         n_runs=max(3, n_runs // 5), n_steps=n_steps
     )
     _dump(out_dir / "topology.json", topo)
     runner.print_results_table(topo, "Topology robustness")
 
-    print("\n[5/6] Concurrent degradation")
+    print("\n[5/8] Step-fault study (early trigger)")
+    step = runner.run_step_fault(n_runs=max(5, n_runs // 3), n_steps=n_steps)
+    _dump(out_dir / "step_fault.json", step)
+    runner.print_results_table(step, "Step fault")
+
+    print("\n[6/8] High-fidelity comparative study")
+    hf = ExperimentRunner.run_hf_comparative(
+        n_runs=max(3, n_runs // 5), n_steps=n_steps
+    )
+    _dump(out_dir / "high_fidelity_comparative.json", hf)
+    runner.print_results_table(hf, "High-fidelity comparative")
+
+    print("\n[7/8] Concurrent degradation")
     conc = runner.run_concurrent_degradation(n_runs=n_runs, n_steps=n_steps)
     _dump(out_dir / "concurrent.json", conc)
     runner.print_results_table(conc, "Concurrent")
 
-    print("\n[6/6] Scalability sweep")
+    print("\n[8/8] Scalability sweep")
     sizes = [5, 8, 12, 16] if args.quick else [5, 8, 12, 16, 20, 30]
     scale = ExperimentRunner.run_scalability(
         sizes=sizes, n_steps=200, n_runs=2 if args.quick else 3
@@ -221,6 +233,7 @@ def main() -> None:
                 fig_scalability,
                 fig_scenario1,
                 fig_scenario2,
+                fig_step_fault,
                 fig_topology,
             )
 
@@ -233,6 +246,7 @@ def main() -> None:
             fig_scenario2(args.figures_dir, runner, args.seed, args.quick)
             fig_topology(args.figures_dir, runner, args.seed, args.quick)
             fig_multi_fault(args.figures_dir, runner, args.seed, args.quick)
+            fig_step_fault(args.figures_dir, runner, args.seed, args.quick)
             fig_scalability(args.figures_dir, args.seed, args.quick)
             fig_high_fidelity(args.figures_dir, args.seed, args.quick)
         except ImportError as exc:

@@ -92,7 +92,7 @@ def collect_residual_samples(
 def train_gdm(
     n_agents: int,
     n_samples: int = Config.N_TRAIN_SAMPLES,
-    fault_healths: tuple[float, ...] = (0.5, 0.3, 0.1),
+    fault_healths: tuple[float, ...] = Config.FAULT_HEALTHS,
     cross_agent_noise_std: float = 0.005,
     seed: int = 0,
 ) -> tuple[np.ndarray, list[np.ndarray]]:

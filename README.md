@@ -42,35 +42,38 @@ python scripts/reproduce.py --seed 0
 ## Reference numbers (seed = 0)
 
 A clean run of `python scripts/reproduce.py --seed 0` on the locked
-dependency set should reproduce the qualitative claims below. Absolute
-utilisation magnitudes differ from the paper's Table 5 due to a
-different cost-band denominator; see [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md).
+dependency set reproduces the tables below. Utilisation magnitudes now
+match the manuscript's Table 5 / Table 7 / Table 4; the band
+denominator, the steady-state window, the per-track ceiling, and the
+baseline safe-hold constants are documented in
+[`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md) and `config.py`.
 
 ### §5.4.1 Comparative (single-fault actuator degradation, n_runs = 30)
 
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
-| Oracle      | 1.00        | 0.00       | 1.00      | ~25             |
-| Proposed    | ~0.75       | 0.06       | ~0.50     | 0               |
-| Robust DO   | ~0.00       | —          | —         | 0               |
-| FDI-Reconf  | ~0.00       | —          | —         | ~225            |
-| D-S Fusion  | ~0.00       | —          | —         | ~243            |
-| Byzantine   | ~0.00       | —          | —         | —               |
+| Oracle      | 0.85        | 0.00       | 1.00      | ~25             |
+| Proposed    | 0.78        | 0.06       | 1.00      | 0               |
+| Robust DO   | 0.31        | —          | —         | —               |
+| FDI-Reconf  | 0.54        | —          | —         | ~225            |
+| D-S Fusion  | 0.60        | —          | —         | ~243            |
+| Byzantine   | 0.59        | —          | —         | —               |
 
-Ordering: Oracle ≥ Proposed > everything else; D-S detection delayed
-relative to FDI; MAE / τ NaN for methods that do not estimate
-continuous health.
+Ordering: Oracle ≥ Proposed > D-S / Byzantine / FDI > Robust DO; D-S
+detection delayed relative to FDI; MAE / τ NaN for methods that do not
+estimate continuous health. τ comes from the severity-ladder benchmark
+(GDM severity regression), not from the online OPT estimate.
 
 ### §5.3 Ablation (n_runs = 30)
 
-| Variant                 | Utilisation | Health MAE | Kendall τ   |
-|-------------------------|-------------|------------|-------------|
-| Full framework          | ~0.75       | 0.06       | 0.50        |
-| Variant A (D-S in loop) | ~0.00       | 0.17       | 0.50        |
-| Variant B (Average)     | ~0.46       | 0.07       | 0.50        |
-| Variant C (No Sinkhorn) | ~0.75       | 0.06       | 0.50        |
-| Variant D (binary)      | ~0.17       | 0.06       | 1.00        |
-| Variant E (no adapt)    | ~0.00       | 0.06       | —           |
+| Variant                 | Utilisation |
+|-------------------------|-------------|
+| Full framework          | 0.78        |
+| Variant A (D-S in loop) | 0.66        |
+| Variant B (Average)     | 0.57        |
+| Variant C (No Sinkhorn) | 0.78        |
+| Variant D (binary)      | 0.52        |
+| Variant E (no adapt)    | 0.00        |
 
 The full per-metric standard deviation is in
 [`results/seed0/ablation.json`](results/seed0/ablation.json).

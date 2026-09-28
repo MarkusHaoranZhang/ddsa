@@ -102,6 +102,37 @@ def perturb_topology(
     sequence linearly interpolates the cumulative count between
     intervals.
     """
+    w_seq, _ = topology_removal_sequence(
+        W_base,
+        n_intervals,
+        mode=mode,
+        n_removals=n_removals,
+        degraded_agent=degraded_agent,
+        rng=rng,
+    )
+    return w_seq
+
+
+def topology_removal_sequence(
+    W_base: np.ndarray,
+    n_intervals: int,
+    *,
+    mode: str = "random",
+    n_removals: int,
+    degraded_agent: int = 0,
+    rng: np.random.Generator | None = None,
+) -> tuple[list[np.ndarray], list[list[tuple[int, int]]]]:
+    """Progressive link removal: mixing matrices plus remaining edges.
+
+    Returns ``(w_seq, edges_seq)`` where ``w_seq[k]`` is the row-
+    normalised mixing matrix at interval ``k`` and ``edges_seq[k]`` is
+    the formation-edge list still physically present. Removing an
+    inter-satellite link drops both its communication weight and its
+    formation-keeping coupling term; if the coupling were kept, the
+    per-agent tracking term would pin every healthy agent to its
+    station no matter how many links were cut, and the study would be
+    insensitive by construction.
+    """
     if rng is None:
         rng = np.random.default_rng()
     if n_removals < 0:
@@ -135,21 +166,46 @@ def perturb_topology(
 
     # build cumulative removal schedule
     removals = candidates[: n_removals]
-    seq: list[np.ndarray] = []
+    full_edges = Config.edges(n)
+    w_seq: list[np.ndarray] = []
+    edges_seq: list[list[tuple[int, int]]] = []
     for k in range(n_intervals):
         # progressive: remove an extra edge every n_intervals/n_removals steps
         active_count = int(round((k + 1) / n_intervals * len(removals)))
         active_count = min(active_count, len(removals))
+        removed: set[tuple[int, int]] = set()
         W = W_base.copy()
         for idx in range(active_count):
             i, j = removals[idx]
             W[i, j] = 0.0
             W[j, i] = 0.0
+            removed.add((i, j))
         rs = W.sum(axis=1, keepdims=True)
         rs = np.where(rs > 0, rs, 1.0)
         W = W / rs
-        seq.append(W)
-    return seq
+        w_seq.append(W)
+        edges_seq.append([(a, b) for (a, b) in full_edges if (a, b) not in removed])
+    return w_seq, edges_seq
+
+
+# --------------------------------------------------------- §5.5.3
+def step_fault_profile(
+    n_agents: int,
+    n_steps: int,
+    *,
+    onset_time: int = 200,
+    health_after: float = 0.4,
+    agent_idx: int = 0,
+) -> tuple[np.ndarray, int]:
+    """§5.5.3 step fault: capability drops abruptly to ``health_after``.
+
+    Unlike the exponential decay of the progressive scenario, the
+    sudden drop produces a residual-energy spike that the engine's
+    early trigger is meant to catch between scheduled diagnosis ticks.
+    """
+    h = np.ones((n_agents, n_steps))
+    h[agent_idx, onset_time:] = health_after
+    return h, onset_time
 
 
 # --------------------------------------------------------- §5.5.2

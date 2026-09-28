@@ -69,12 +69,20 @@ class RPSDiagnosticModule:
         self.std_f = np.full((n_agents, n_agents), 0.2)
         self.reliabilities = np.full(n_agents, Config.RELIABILITY_INIT)
         self._fitted = False
+        # Severity regression: residual energy is linear in degradation
+        # severity through the fault envelope, so the per-level means of
+        # the training blocks give a per-agent line
+        # ``energy = intercept + slope * severity`` that the diagnostic
+        # layer uses to report a continuous severity estimate.
+        self._severity_slope = np.ones(n_agents)
+        self._severity_intercept = np.zeros(n_agents)
 
     # ------------------------------------------------------------------ fit
     def fit(
         self,
         healthy_residuals: np.ndarray,
         faulty_residuals_per_agent: list[np.ndarray] | np.ndarray,
+        severity_levels: tuple[float, ...] | None = None,
     ) -> None:
         """Train the GDM from simulator-collected residual samples.
 
@@ -89,6 +97,10 @@ class RPSDiagnosticModule:
             Element ``j`` is the residual block recorded while *only* agent
             ``j`` is faulty, used to estimate ``mean_f[:, j]`` /
             ``std_f[:, j]``.
+        severity_levels : tuple of float, optional
+            Fault-health levels whose equal-sized blocks were concatenated
+            into each faulty block (``Config.FAULT_HEALTHS`` for the
+            numerical track, ``HF_FAULT_HEALTHS`` for the HF track).
         """
         H = np.asarray(healthy_residuals)
         if H.ndim != 2 or H.shape[1] != self.n:
@@ -126,6 +138,29 @@ class RPSDiagnosticModule:
             faulty_std_at_target = max(float(B.std(axis=0)[j]), 1e-3)
             self.mean_f[:, j] = faulty_mean_at_target
             self.std_f[:, j] = faulty_std_at_target
+            # Severity regression from the per-level blocks. ``train_gdm``
+            # concatenates one equal-sized chunk per level in
+            # ``Config.FAULT_HEALTHS`` order, so the level means at the
+            # target column recover points on the energy-severity line.
+            levels = (
+                severity_levels
+                if severity_levels is not None
+                else Config.FAULT_HEALTHS
+            )
+            n_levels = len(levels)
+            if n_levels >= 2 and B.shape[0] >= 2 * n_levels and B.shape[0] % n_levels == 0:
+                chunk = B.shape[0] // n_levels
+                severities = np.array([1.0 - h for h in levels], dtype=float)
+                energies = np.array(
+                    [
+                        float(B[k * chunk:(k + 1) * chunk].mean(axis=0)[j])
+                        for k in range(n_levels)
+                    ]
+                )
+                if float(np.ptp(severities)) > 0.0:
+                    slope, intercept = np.polyfit(severities, energies, 1)
+                    self._severity_slope[j] = max(float(slope), 1e-3)
+                    self._severity_intercept[j] = float(intercept)
         self._fitted = True
 
         # Reliability is a derived quantity of the fitted GDM (the
@@ -319,6 +354,24 @@ class RPSDiagnosticModule:
         if total > 0:
             deg_prob = deg_prob / total
         return np.clip(1.0 - deg_prob, 0.0, 1.0)
+
+    def extract_severity_estimate(
+        self, residual_energy_vec: np.ndarray
+    ) -> np.ndarray:
+        """Per-agent severity (1 - health) from the GDM envelope.
+
+        The RPS pipeline's OPT output is a suspicion degree -- it says
+        *which* agent is degraded, not *how much*. The diagnostic layer
+        also reports a continuous severity: residual energy is linear in
+        severity through the fault envelope, so inverting the per-agent
+        line fitted at ``fit`` time (``energy = intercept + slope *
+        severity``) gives a severity estimate whose rank fidelity is
+        what the Kendall τ benchmark measures. The online control loop
+        keeps using the OPT health directly.
+        """
+        energy = np.asarray(residual_energy_vec, dtype=float)
+        severity = (energy - self._severity_intercept) / self._severity_slope
+        return np.clip(severity, 0.0, 1.0)
 
     # ---------------------------------------- online reliability update
     def update_reliability(self, agent_i: int) -> float:

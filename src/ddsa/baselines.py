@@ -113,12 +113,14 @@ class BaselineFDIReconf:
 
 # -------------------------------------------------------------- Byzantine
 class BaselineByzantineResilient:
-    """Coordinate-wise trimmed-mean aggregation, adversarial-style baseline.
+    """Trimmed-mean aggregation with outlier quarantine.
 
-    The class holds the trim ratio plus a private ``DIGingOptimizer``
-    instance the runner reuses for its custom Byzantine-aware update
-    loop (``runner._byzantine_optimise``), which performs the trimmed
-    mean inline against its own ``(N, N, dim)`` state.
+    The class holds the trim ratio plus the residual-energy detector
+    the runner uses for quarantine decisions (``detect_outliers``).
+    ``self.optimizer`` is kept as the DIGing surface a caller would
+    drive if it wants the trimmed-mean consensus directly. The runner
+    quarantines flagged agents into a frozen safe hold while the
+    healthy agents keep the nominal (no health estimation) objective.
     """
 
     def __init__(
@@ -136,6 +138,29 @@ class BaselineByzantineResilient:
         self.alpha = alpha
         self.trim_ratio = trim_ratio
         self.optimizer = DIGingOptimizer(n_agents, dim, W, alpha, rng=rng)
+
+    def detect_outliers(
+        self, residual_energy: np.ndarray, k_mad: float = Config.BYZ_OUTLIER_K
+    ) -> np.ndarray:
+        """Flag agents whose residual energy is a trimmed-core outlier.
+
+        The detector trims ``trim_ratio`` of the sorted energies on both
+        sides, computes the median and median-absolute-deviation of the
+        surviving core, and flags any agent above ``median + k_mad *
+        MAD``. With a single faulty agent the median tracks the healthy
+        noise floor, so the faulty agent crosses the envelope as its
+        degradation deepens while the healthy agents stay inside it.
+        """
+        energy = np.asarray(residual_energy, dtype=float)
+        n = len(energy)
+        n_trim = max(1, int(n * self.trim_ratio))
+        sorted_e = np.sort(energy)
+        core = (
+            sorted_e[n_trim:-n_trim] if n_trim * 2 < n else sorted_e
+        )
+        median = float(np.median(core))
+        mad = float(np.median(np.abs(core - median))) + 1e-9
+        return energy > median + k_mad * mad
 
 
 # -------------------------------------------------------- Dempster-Shafer
@@ -169,7 +194,11 @@ class BaselineDSFusion:
                 out[k] /= s
         return out
 
-    def fuse(self, local_health_estimates: np.ndarray) -> np.ndarray:
+    def fuse(
+        self,
+        local_health_estimates: np.ndarray,
+        ignorance: float = 0.1,
+    ) -> np.ndarray:
         """Combine local soft health estimates via Dempster's rule per agent.
 
         Parameters
@@ -177,16 +206,24 @@ class BaselineDSFusion:
         local_health_estimates : (N, N) array
             ``local_health_estimates[i, j]`` is agent ``i``'s soft belief
             that agent ``j`` is healthy (a number in ``[0, 1]``).
+        ignorance : float
+            Mass assigned to the ignorance set ``U`` in each local BPA.
+            The default 0.1 gives a decisive, near-binary fused belief
+            (used where the baseline only needs a detection decision);
+            a larger value keeps the fused belief close to the local
+            evidence, which is what the closed-loop inline variant
+            needs so the adaptation layer sees a continuous severity
+            rather than a saturated label.
         """
         E = np.clip(np.asarray(local_health_estimates), 0.0, 1.0)
+        u = float(np.clip(ignorance, 0.0, 1.0))
         out = np.zeros(self.n)
         for j in range(self.n):
-            # convert each soft estimate into a BPA with a small mass on
-            # ignorance so Dempster combination stays well-behaved
+            # convert each soft estimate into a BPA with the requested
+            # mass on ignorance so Dempster combination stays well-behaved
             mass_list = []
             for i in range(self.n):
                 p = float(E[i, j])
-                u = 0.1  # mass on ignorance
                 h = (1 - u) * p
                 f = (1 - u) * (1 - p)
                 mass_list.append({"H": h, "F": f, "U": u})

@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from ddsa.config import Config
+from ddsa.cost import formation_cost_global
 from ddsa.engine import run_closed_loop
 from ddsa.hf_runner import run_hf_diagnostic_experiment
 from ddsa.rho_max_calibration import calibrate_rho_max
@@ -31,7 +32,8 @@ from ddsa.runner import ExperimentRunner
 from ddsa.scenarios import (
     actuator_degradation_profile,
     communication_loss_w_sequence,
-    perturb_topology,
+    step_fault_profile,
+    topology_removal_sequence,
 )
 
 plt.rcParams.update(
@@ -337,7 +339,7 @@ def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
 # ----------------------------------------------------- 10. topology
 def fig_topology(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     modes = ["random", "high_weight", "adjacent"]
-    counts = list(range(0, 5)) if not quick else list(range(0, 4))
+    counts = list(range(0, 9)) if not quick else list(range(0, 5))
     n_steps = 300
 
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
@@ -347,21 +349,32 @@ def fig_topology(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool
             n_run = 2 if quick else 3
             vals: list[float] = []
             for run_idx in range(n_run):
-                profile, _ = runner.degradation_profile(n_steps, seed=seed + run_idx * 17)
+                run_seed = seed + run_idx * 17
+                rng = np.random.default_rng(run_seed)
+                agent_idx = int(rng.integers(0, runner.n))
+                profile, _ = runner.degradation_profile(
+                    n_steps, seed=run_seed, agent_idx=agent_idx
+                )
                 if n_rem == 0:
                     w_seq = None
+                    edges_seq = None
                 else:
-                    w_seq = perturb_topology(
+                    w_seq, edges_seq = topology_removal_sequence(
                         runner.W, 10, mode=mode, n_removals=n_rem,
-                        rng=np.random.default_rng(seed + run_idx),
+                        degraded_agent=agent_idx,
+                        rng=np.random.default_rng(run_seed),
                     )
-                m, _ = runner.run_proposed(profile, seed + run_idx, w_base_per_interval=w_seq)
-                vals.append(m["constraint_rate"])
+                m, log = runner.run_proposed(
+                    profile, run_seed,
+                    w_base_per_interval=w_seq,
+                    edges_per_interval=edges_seq,
+                )
+                vals.append(runner._edge_constraint_rate(log.optimiser_targets[-1]))
             ys.append(float(np.mean(vals)))
         ax.plot(counts, ys, "o-", label=mode, lw=1.2)
     ax.axhline(0.94, color="gray", ls="--", lw=0.8, label="threshold 0.94")
     ax.set_xlabel("edges removed")
-    ax.set_ylabel("constraint satisfaction rate")
+    ax.set_ylabel("formation-keeping error within bounds")
     ax.set_title("Topology robustness")
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_topology_robustness.pdf")
@@ -438,6 +451,54 @@ def fig_high_fidelity(out_dir: Path, seed: int, quick: bool):
     _save(fig, out_dir, "fig_high_fidelity.pdf")
 
 
+# ----------------------------------------------------- 14. step fault
+def fig_step_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
+    """Progressive decay vs abrupt step drop with the early trigger.
+
+    Cost is the global formation cost evaluated at the true health on
+    each diagnosis tick's optimizer target (the same evaluation the
+    utilisation band uses), so both scenarios are directly comparable.
+    """
+    n_steps = 300 if quick else 500
+    onset = min(Config.STEP_FAULT_ONSET, n_steps // 2)
+    prog, _ = runner.degradation_profile(n_steps, seed=seed)
+    step, _ = step_fault_profile(
+        runner.n, n_steps,
+        onset_time=onset,
+        health_after=Config.STEP_FAULT_HEALTH_AFTER,
+    )
+    _, log_p = runner.run_proposed(prog, seed)
+    _, log_s = runner.run_proposed(
+        step, seed,
+        early_trigger_threshold=Config.STEP_FAULT_TRIGGER,
+        early_trigger_check_every=Config.STEP_FAULT_CHECK_EVERY,
+    )
+
+    def trace(log, profile):
+        return [
+            formation_cost_global(
+                target, profile[:, min(tick, profile.shape[1] - 1)],
+                runner.desired_positions, runner.edges,
+                beta=runner.beta, gamma=runner.gamma,
+            )
+            for target, tick in zip(
+                log.optimiser_targets, log.diag_steps, strict=False
+            )
+        ]
+
+    xs = list(range(0, n_steps, max(1, n_steps // 10)))
+    fig, ax = plt.subplots(figsize=(5.5, 3.2))
+    ax.plot(xs, trace(log_p, prog), "o-", lw=1.2, label="Progressive degradation")
+    ax.plot(xs, trace(log_s, step), "s-", lw=1.2, label="Step fault (early trigger)")
+    ax.axvline(onset, color="gray", ls="--", lw=0.8)
+    ax.text(onset, ax.get_ylim()[1], " step fault", fontsize=8, va="top")
+    ax.set_xlabel("simulation step")
+    ax.set_ylabel("global cost (normalized target)")
+    ax.set_title("Step-fault response")
+    ax.legend(fontsize=8)
+    _save(fig, out_dir, "fig_step_fault.pdf")
+
+
 # ----------------------------------------------------- driver
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -461,6 +522,7 @@ def main() -> None:
     fig_scenario2(out, runner, seed, quick)
     fig_topology(out, runner, seed, quick)
     fig_multi_fault(out, runner, seed, quick)
+    fig_step_fault(out, runner, seed, quick)
     fig_scalability(out, seed, quick)
     fig_high_fidelity(out, seed, quick)
 

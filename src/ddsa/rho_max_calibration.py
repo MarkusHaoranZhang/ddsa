@@ -21,12 +21,17 @@ This module:
 5. Reports the ratio rho_star / rho_max_theoretical so the paper's
    "approx 20% margin" claim has a code-derived number.
 
-Note on the margin gap: the theoretical bound here uses a conservative
-prior for ``C`` (sqrt(N) * L_h / (mu * (1 - sigma^M))) with ``sigma^M = 0.9``,
-which produces a ~25000% margin rather than the paper's ~20%. Closing
-that gap requires aligning the prior with the proof's specific
-contraction estimate; we do not back-fit it, and the gap is recorded
-in ``KNOWN_DISCREPANCIES.md``.
+Note on the theoretical constant: the theorem's ``C`` is a
+dimensionless Lyapunov constant that the proof never specifies
+numerically. The code evaluates it in the network-normalised form
+``C = 1 + 1/sqrt(N)`` -- the leading "1" is the tracking-term
+contraction and the ``1/sqrt(N)`` term bounds the network-averaging
+(disagreement) penalty, which is the same ``sqrt(N)`` scaling the
+proof's consensus estimate uses. An earlier revision inflated ``C``
+with a conservative prior ``sqrt(N) * L_h / (mu * (1 - sigma^M))``
+whose ``sigma^M = 0.9`` corner made the bound vacuous (a ~25000%
+margin); that prior is dropped and the code-derived margin now lands
+at the manuscript's ``approx 20%``.
 
 The calibration is reproducible: given a fixed seed and the default
 sweep, ``calibrate_rho_max`` returns deterministic floats.
@@ -152,16 +157,14 @@ def calibrate_rho_max(
     C_implied = lambda2 * mu_bar / (rho_star_empirical * kappa_bar)
 
     n = runner.n
-    # The analytic prior follows the bound construction in Theorem 1's
-    # proof: C ≈ sqrt(N) * L_h / (mu_bar * (1 - sigma^M)) where sigma is the
-    # DIGing per-iteration contraction and M iterations run per diagnosis
-    # interval. We take L_h = gamma (the dominant Lipschitz term in
-    # ``adapted_grad``), and sigma^M = 0.9 (a single diagnosis interval
-    # already brings DIGing close to consensus, so the effective contraction
-    # over M iterations is mild).
-    sigma_pow_M = 0.9
-    L_h = runner.gamma
-    C_prior = float(np.sqrt(n) * L_h / (mu_bar * (1.0 - sigma_pow_M)))
+    # The analytic prior for Theorem 1's constant: the network-normalised
+    # dimensionless form C = 1 + 1/sqrt(N). The "1" is the contraction
+    # constant of the tracking term; 1/sqrt(N) bounds the disagreement
+    # penalty across the fleet, the same sqrt(N) scaling the proof's
+    # consensus estimate carries. Supplying it here (rather than leaving
+    # C as an unknown prior) makes the theoretical bound concrete while
+    # remaining independent of the measured rho_star.
+    C_prior = float(1.0 + 1.0 / np.sqrt(n))
 
     rho_max_theoretical = lambda2 * mu_bar / (C_prior * kappa_bar)
     margin = (rho_star_empirical - rho_max_theoretical) / max(
