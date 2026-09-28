@@ -150,7 +150,7 @@ figure:
   Reproducing the ordering would require a different experiment
   design; the ledger records the mismatch rather than tuning the
   perturbation to force a spread.
-* **Statistical significance markers** (`*` and `†` in Table 5–7): the
+* **Statistical significance markers** (`*` and `†` in Tables 1-3): the
   paper applies a paired t-test at p<0.05; the code reports mean ± std
   but does not annotate significance. Adding the markers is mechanical
   but currently not done.

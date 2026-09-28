@@ -43,7 +43,8 @@ python scripts/reproduce.py --seed 0
 
 A clean run of `python scripts/reproduce.py --seed 0` on the locked
 dependency set reproduces the tables below. Utilisation magnitudes now
-match the manuscript's Table 5 / Table 7 / Table 4; the band
+match the manuscript's Table 3 (comparative summary), Tables 1-2
+(ablations) and Table 4 (high-fidelity); the band
 denominator, the steady-state window, the per-track ceiling, and the
 baseline safe-hold constants are documented in
 [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md) and `config.py`.
