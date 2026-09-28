@@ -81,6 +81,30 @@ baseline details; the retreat constants were calibrated so the band
 fractions land in the reported range instead of saturating at the
 no-adaptation cost.
 
+## Figure-by-figure support matrix
+
+The manuscript's 13 figures are rendered by the submission-side
+`出图/generate_figures.py`, whose data are formula-generated for
+typesetting. The repository's `scripts/make_figures.py` renders the
+same figure set from real runs. Support status of each manuscript
+figure:
+
+| Figure | Status |
+|---|---|
+| architecture | schematic, identical content |
+| convergence_rate | partial: manuscript plots tracking error vs rho with rho_max = 0.1; code plots DIGing consensus spread vs the calibrated rho_max = 0.031 (rho* = 0.0375). Different quantity, same qualitative message. |
+| convergence_time | partial: manuscript is analytic (1/(1-ratio)); code measures settle iterations inside a diagnosis interval. |
+| health_sensitivity | partial: manuscript reports a normalised optimality gap (slope 2.3 up to sigma = 0.15); code reports the raw cost vs injected noise. |
+| gamma_sensitivity | partial: code (band utilisation) shows the band collapsing for gamma = 1 (no meaningful safeguard window) and rising/saturating for gamma >= 5; the manuscript's U-shape comes from its "capability use" semantics, which the band metric does not measure. |
+| scenario1_cost | partial: relative order differs (code Robust is worst, manuscript has it second); the utilisation table the figure is anchored to matches (Table 5). |
+| scenario1_constraint | partial: the code's pair-level constraint rate saturates at 1.0 at the 2 m tolerance; the degrading counterpart is the edge-level `cs_edge` reported in the topology study. |
+| scenario2_cost | fixed: every method now sees the same loss sequence; the manuscript's FDI spurious-isolation stair-steps are not reproduced (the FDI detector is residual-based, not packet-based). |
+| scenario2_variance | not reproduced: measured across-run variance ordering differs from the manuscript's 61% reduction claim; both methods see the same loss and the variance is dominated by fault-onset jitter. |
+| topology_robustness | partial: 0.94 crossings 5/4/2 vs manuscript 5/4/3 (one removal conservative on the adjacent mode). |
+| multi_fault | partial: same truth profiles; the estimate biases are emergent (concurrent MAE ~0.03) rather than the manuscript's fixed 0.040/0.078 curves. |
+| step_fault | partial: code reports the real per-step physical transient (measured ~81% peak above steady, ~55-step recovery, step steady ~0.8% above progressive); the manuscript's 18%/<40-step/+3% values come from its synthetic generator. |
+| scalability | fixed: measured truncated wall time plus a full-PES complexity curve extrapolated from the measured per-permutation cost; the infeasibility story (explosive growth, 1e4 s practical ceiling) is reproduced. |
+
 ## What the code does not test independently
 
 * **§3.2 RPSGM support function — GDM substitution**: the paper builds

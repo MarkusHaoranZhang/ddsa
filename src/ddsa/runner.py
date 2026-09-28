@@ -205,6 +205,7 @@ class ExperimentRunner:
         edges_per_interval: list[list[tuple[int, int]]] | None = None,
         early_trigger_threshold: float | None = None,
         early_trigger_check_every: int = 5,
+        trace_positions: bool = False,
     ) -> tuple[MetricDict, EngineLog]:
         """Single entry point for every engine-driven method.
 
@@ -238,6 +239,7 @@ class ExperimentRunner:
             edges_per_interval=edges_per_interval,
             early_trigger_threshold=early_trigger_threshold,
             early_trigger_check_every=early_trigger_check_every,
+            trace_positions=trace_positions,
             isolation_mask=iso_mask,
             isolation_pins=isolation_pins,
             simulator_factory=simulator_factory,
@@ -255,6 +257,7 @@ class ExperimentRunner:
         edges_per_interval: list[list[tuple[int, int]]] | None = None,
         early_trigger_threshold: float | None = None,
         early_trigger_check_every: int = 5,
+        trace_positions: bool = False,
     ) -> tuple[MetricDict, EngineLog]:
         """Proposed method: RPSGM + RPSR + OPT + Sinkhorn-adapted DIGing.
 
@@ -278,23 +281,27 @@ class ExperimentRunner:
             edges_per_interval=edges_per_interval,
             early_trigger_threshold=early_trigger_threshold,
             early_trigger_check_every=early_trigger_check_every,
+            trace_positions=trace_positions,
         )
         m["kendall_tau"] = self._severity_ranking_tau(seed)
         return m, log
 
     def run_oracle(
-        self, health_profile: np.ndarray, seed: int
+        self, health_profile: np.ndarray, seed: int,
+        *, w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """Oracle baseline: closed loop driven by ground-truth health."""
         # Override = ground truth; engine bypasses RPS.
         return self._run_engine_method(
-            health_profile, seed, override=health_profile, use_w_adaptation=True
+            health_profile, seed, override=health_profile, use_w_adaptation=True,
+            w_base_per_interval=w_base_per_interval,
         )
 
     def run_robust_do(
         self, health_profile: np.ndarray, seed: int,
         *, margin: float = Config.ROBUST_DO_MARGIN,
         disturbance_ref: float = Config.ROBUST_DO_DISTURBANCE_REF,
+        w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 Robust DO: conservative margin sized by residual evidence.
 
@@ -323,7 +330,8 @@ class ExperimentRunner:
             diag_end = min(n_steps, (k + 1) * steps_per_diag)
             assumed[:, diag_start:diag_end] = h_assumed[:, None]
         m, log = self._run_engine_method(
-            health_profile, seed, override=assumed, use_w_adaptation=False
+            health_profile, seed, override=assumed, use_w_adaptation=False,
+            w_base_per_interval=w_base_per_interval,
         )
         # Robust DO does not estimate health; report diagnostic metrics
         # as NaN so summaries can render "—" rather than a misleading 0.
@@ -332,7 +340,8 @@ class ExperimentRunner:
         return m, log
 
     def run_fdi(
-        self, health_profile: np.ndarray, seed: int
+        self, health_profile: np.ndarray, seed: int,
+        *, w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 FDI-Reconf: residual-energy threshold isolation + reconfiguration."""
         # Per §5.1.2: residual-energy threshold isolates degraded agents
@@ -343,6 +352,7 @@ class ExperimentRunner:
             health_profile, seed,
             override=override, iso_mask=iso_mask, isolation_pins=pins,
             use_w_adaptation=True,
+            w_base_per_interval=w_base_per_interval,
         )
         # FDI emits a binary {0, 1} mask, not a continuous health
         # estimate; diagnostic-layer metrics are not applicable.
@@ -351,7 +361,8 @@ class ExperimentRunner:
         return m, log
 
     def run_ds_fusion(
-        self, health_profile: np.ndarray, seed: int
+        self, health_profile: np.ndarray, seed: int,
+        *, w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.4 D-S baseline: Dempster combine + threshold-based reconfiguration.
 
@@ -368,6 +379,7 @@ class ExperimentRunner:
             health_profile, seed,
             override=override, iso_mask=iso_mask, isolation_pins=pins,
             use_w_adaptation=True,
+            w_base_per_interval=w_base_per_interval,
         )
         # D-S in the comparative table emits a binary isolation profile
         # (the closed-loop variant is studied separately in §5.3).
@@ -695,7 +707,8 @@ class ExperimentRunner:
 
     # --- Byzantine: engine-driven quarantine ---------------------------
     def run_byzantine(
-        self, health_profile: np.ndarray, seed: int
+        self, health_profile: np.ndarray, seed: int,
+        *, w_base_per_interval: list[np.ndarray] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """Trimmed-mean aggregation with outlier quarantine.
 
@@ -752,6 +765,7 @@ class ExperimentRunner:
             health_profile, seed,
             override=ones_h, iso_mask=iso_mask, isolation_pins=pins,
             use_w_adaptation=False,
+            w_base_per_interval=w_base_per_interval,
         )
         # Byzantine never estimates health; report diagnostic metrics
         # as NaN so summaries can render "—" rather than a misleading 0.
@@ -1027,7 +1041,11 @@ class ExperimentRunner:
         n_steps: int = 500,
         eta: float = Config.ETA_SINGLE,
     ) -> StudyResult:
-        """§5.4.2: two specific edges undergo sinusoidal packet loss."""
+        """§5.4.2: two specific edges undergo sinusoidal packet loss.
+
+        Every method sees the same time-varying communicating graph; the
+        comparison is only meaningful if the disturbance is shared.
+        """
         # pick two non-trivial edges that actually exist in the topology
         n = self.n
         edges_to_drop: list[tuple[int, int]] = [
@@ -1039,13 +1057,14 @@ class ExperimentRunner:
             self.W, n_intervals, edges_to_drop=edges_to_drop
         )
 
-        methods = {
-            "Proposed": lambda p, s: self.run_proposed(
-                p, s, w_base_per_interval=w_seq
-            ),
-            "Robust DO": self.run_robust_do,
-            "FDI-Reconf": self.run_fdi,
-            "Oracle": self.run_oracle,
+        def with_loss(fn: Callable[..., Any]) -> MethodFn:
+            return lambda p, s: fn(p, s, w_base_per_interval=w_seq)
+
+        methods: dict[str, MethodFn] = {
+            "Proposed": with_loss(self.run_proposed),
+            "Robust DO": with_loss(self.run_robust_do),
+            "FDI-Reconf": with_loss(self.run_fdi),
+            "Oracle": with_loss(self.run_oracle),
         }
         results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
@@ -1175,10 +1194,39 @@ class ExperimentRunner:
                 profile, seed,
                 early_trigger_threshold=threshold,
                 early_trigger_check_every=Config.STEP_FAULT_CHECK_EVERY,
+                trace_positions=True,
             )
             m["early_trigger"] = float(
                 log.early_trigger_tick if log.early_trigger_tick is not None else -1
             )
+            # Transient metrics on the per-step physical cost trace: peak
+            # overshoot above the settled value, and the number of steps
+            # from the peak until the cost is back within 5% of steady.
+            n_steps_total = profile.shape[1]
+            costs = np.array([
+                formation_cost_global(
+                    positions, profile[:, min(step, n_steps_total - 1)],
+                    self.desired_positions, self.edges,
+                    beta=self.beta, gamma=self.gamma,
+                )
+                for step, positions in zip(
+                    log.position_step_trace, log.position_trace, strict=False
+                )
+            ])
+            steady = float(np.mean(costs[-max(1, len(costs) // 10):]))
+            post = costs[onset_time:]
+            peak_idx = int(np.argmax(post))
+            peak = float(post[peak_idx])
+            m["overshoot_pct"] = float(
+                100.0 * (peak - steady) / steady if steady > 0 else float("nan")
+            )
+            recovery = -1.0
+            for idx in range(peak_idx, len(post)):
+                if post[idx] <= 1.05 * steady:
+                    recovery = float(idx)
+                    break
+            m["recovery_steps"] = recovery
+            m["steady_cost"] = steady
             results["Proposed"].append(m)
         return self._summarise_runs(results)
 

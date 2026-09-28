@@ -68,6 +68,10 @@ class EngineLog:
     wall_time_per_diag: list[float] = field(default_factory=list)
     detection_tick: int | None = None  # first tick where any h_hat < 0.9
     early_trigger_tick: int | None = None  # first in-interval trigger tick
+    # Optional per-step physical positions (only populated when
+    # ``trace_positions`` is set); used by the step-fault transient study.
+    position_trace: list[np.ndarray] = field(default_factory=list)
+    position_step_trace: list[int] = field(default_factory=list)
 
 
 def run_closed_loop(
@@ -92,6 +96,7 @@ def run_closed_loop(
     edges_per_interval: list[list[tuple[int, int]]] | None = None,
     early_trigger_threshold: float | None = None,
     early_trigger_check_every: int = 5,
+    trace_positions: bool = False,
     simulator_factory: Callable[[], _SimulatorProtocol] | None = None,
     isolation_mask: np.ndarray | None = None,
     isolation_pins: np.ndarray | None = None,
@@ -288,6 +293,9 @@ def run_closed_loop(
         for inner in range(diag_start + 1, diag_end):
             sim.set_health(health_profile[:, inner])
             sim.step(sim.commanded_control(per_agent_target))
+            if trace_positions:
+                log.position_trace.append(sim.get_positions())
+                log.position_step_trace.append(inner)
             if (
                 early_trigger_threshold is not None
                 and not triggered

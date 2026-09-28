@@ -211,27 +211,38 @@ def fig_health_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, q
 # ----------------------------------------------------- 5. gamma U-curve
 def fig_gamma_sensitivity(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     gammas = [1, 5, 10, 15, 20, 30] if not quick else [1, 10, 30]
+    n_steps = 300 if quick else 500
     util: list[float] = []
     util_std: list[float] = []
-    original = Config.GAMMA_NUM
+    original = runner.gamma
     try:
         for gamma in gammas:
-            Config.GAMMA_NUM = float(gamma)
+            runner.gamma = float(gamma)
             runs = []
             for run_idx in range(2 if quick else 3):
-                profile, _ = runner.degradation_profile(300, seed=seed + run_idx * 17)
-                m, _ = runner.run_proposed(profile, seed + run_idx)
-                runs.append(m["utilization"])
+                run_seed = seed + run_idx * 17
+                profile, _ = runner.degradation_profile(n_steps, seed=run_seed)
+                m, log = runner.run_proposed(profile, run_seed)
+                _, oracle_log = runner.run_oracle(profile, run_seed)
+                _, no_adapt_log = runner._run_no_adaptation(profile, run_seed)
+                band = (
+                    runner._per_tick_cost_at_true_health(oracle_log, profile),
+                    runner._per_tick_cost_at_true_health(no_adapt_log, profile),
+                )
+                runs.append(runner._utilisation_timeseries(log, profile, band))
             util.append(float(np.mean(runs)))
             util_std.append(float(np.std(runs)))
     finally:
-        Config.GAMMA_NUM = original
+        runner.gamma = original
 
     fig, ax = plt.subplots(figsize=(5.0, 3.2))
     ax.errorbar(gammas, util, yerr=util_std, fmt="o-", capsize=3)
+    ax.axvline(10, color="gray", ls=":", lw=0.8)
+    ax.text(10.6, float(np.nanmax(util)) * 0.55, "operating\npoint", fontsize=8,
+            color="gray")
     ax.set_xlabel(r"regularisation strength $\gamma$")
     ax.set_ylabel("residual capability utilisation")
-    ax.set_title("Trade-off between safety and exploitation")
+    ax.set_title("Safety-performance trade-off (band utilisation)")
     _save(fig, out_dir, "fig_gamma_sensitivity.pdf")
 
 
@@ -292,47 +303,56 @@ def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
 # ----------------------------------------------------- 8 + 9. scenario 2
 def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     n_steps = 500 if not quick else 200
-    profile, _ = runner.degradation_profile(n_steps, seed=seed)
     edges_to_drop = [(0, 1 % runner.n), (0, 2 % runner.n)]
     w_seq = communication_loss_w_sequence(runner.W, 10, edges_to_drop=edges_to_drop)
+    n_runs = 3 if quick else 8
 
-    cost_curves: dict[str, list[float]] = {}
-
-    _, log_p = runner.run_proposed(profile, seed, w_base_per_interval=w_seq)
-    cost_curves["Proposed"] = [
-        float(np.linalg.norm(p - runner.desired_positions) ** 2) for p in log_p.positions
-    ]
-    _, log_r = runner.run_robust_do(profile, seed)
-    cost_curves["Robust DO"] = [
-        float(np.linalg.norm(p - runner.desired_positions) ** 2) for p in log_r.positions
-    ]
-    _, log_f = runner.run_fdi(profile, seed)
-    cost_curves["FDI-Reconf"] = [
-        float(np.linalg.norm(p - runner.desired_positions) ** 2) for p in log_f.positions
-    ]
+    methods = {
+        "Proposed": runner.run_proposed,
+        "Robust DO": runner.run_robust_do,
+        "FDI-Reconf": runner.run_fdi,
+    }
+    traces: dict[str, np.ndarray] = {}
+    for name, fn in methods.items():
+        runs = []
+        for run_idx in range(n_runs):
+            run_seed = seed + run_idx * 17
+            profile, _ = runner.degradation_profile(n_steps, seed=run_seed)
+            _, log = fn(profile, run_seed, w_base_per_interval=w_seq)
+            runs.append([
+                float(np.linalg.norm(p - runner.desired_positions) ** 2)
+                for p in log.positions
+            ])
+        traces[name] = np.stack(runs)  # (n_runs, n_ticks)
+    xs = np.arange(traces["Proposed"].shape[1])
 
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    for name, ys in cost_curves.items():
-        ax.plot(log_p.diag_steps[: len(ys)], ys, "o-", label=name, lw=1.2)
-    ax.set_xlabel("simulation step")
+    for name, arr in traces.items():
+        mean = arr.mean(axis=0)
+        std = arr.std(axis=0)
+        ax.plot(xs, mean, "o-", label=name, lw=1.2)
+        ax.fill_between(xs, mean - std, mean + std, alpha=0.15)
+    ax.set_xlabel("diagnostic interval")
     ax.set_ylabel("formation tracking cost")
     ax.set_title("Scenario 2: communication-link degradation")
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_scenario2_cost.pdf")
 
+    # Across-run cost variance under the shared intermittent-loss
+    # sequence (second half of the run). Reported as measured; the
+    # manuscript's variance-reduction narrative comes from its synthetic
+    # generator and is not reproduced by the closed loop (see
+    # KNOWN_DISCREPANCIES.md).
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    for name, ys in cost_curves.items():
-        ys = np.asarray(ys, dtype=float)
-        # rolling std across diagnostic windows
-        window = 3
-        rolling = np.array(
-            [np.std(ys[max(0, i - window): i + 1]) for i in range(len(ys))]
-        )
-        ax.plot(log_p.diag_steps[: len(rolling)], rolling, "o-", label=name, lw=1.2)
-    ax.set_xlabel("simulation step")
-    ax.set_ylabel(r"rolling std of cost (window 3)")
-    ax.set_title("Scenario 2: variance under intermittent loss")
-    ax.legend(fontsize=8)
+    names = list(traces.keys())
+    values = []
+    for name in names:
+        arr = traces[name]
+        half = arr.shape[1] // 2
+        values.append(float(arr[:, half:].var(axis=0).mean()))
+    ax.bar(names, values)
+    ax.set_ylabel("mean across-run cost variance")
+    ax.set_title("Scenario 2: cost variance under intermittent loss")
     _save(fig, out_dir, "fig_scenario2_variance.pdf")
 
 
@@ -403,9 +423,12 @@ def fig_multi_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: b
 
 # ----------------------------------------------------- 12. scalability
 def fig_scalability(out_dir: Path, seed: int, quick: bool):
+    from math import perm
+
     sizes = [5, 8, 12, 16, 20, 30] if not quick else [5, 8, 12]
     walls: list[float] = []
     walls_std: list[float] = []
+    n_diag = 10
     for size in sizes:
         sub = ExperimentRunner(n_satellites=size, seed=seed)
         ws = []
@@ -416,8 +439,32 @@ def fig_scalability(out_dir: Path, seed: int, quick: bool):
         walls.append(float(np.mean(ws)))
         walls_std.append(float(np.std(ws)))
 
+    # Per-permutation cost estimated from the smallest measured point, then
+    # used to price the full (untruncated) permutation set: the analytical
+    # complexity story of the manuscript's scalability panel. Both curves
+    # are reported per diagnosis interval.
+    unit_cost = walls[0] / n_diag / sum(
+        perm(sizes[0], length) for length in range(1, Config.L_MAX + 1)
+    )
+    grid = list(range(5, 51))
+    full_pes = [
+        unit_cost * sum(perm(n, length) for length in range(1, n + 1))
+        for n in grid
+    ]
+
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    ax.errorbar(sizes, walls, yerr=walls_std, fmt="o-", capsize=3, label="truncated PES (L=3)")
+    ax.errorbar(
+        sizes, np.array(walls) / n_diag, yerr=np.array(walls_std) / n_diag,
+        fmt="o-", capsize=3, label="truncated PES (L=3, measured)",
+    )
+    ax.plot(grid, full_pes, "s--", lw=1.2, label="full PES (all lengths)")
+    ax.axhline(1e4, color="gray", ls=":", lw=0.9)
+    ax.text(
+        50, 1.2e4, "practical ceiling ($10^{4}$ s)",
+        fontsize=8, color="gray", ha="right", va="bottom",
+    )
+    ax.set_yscale("log")
+    ax.set_ylim(1e-2, 2e5)
     ax.set_xlabel(r"formation size $N$")
     ax.set_ylabel("wall time per diagnosis interval (s)")
     ax.set_title("Scalability of truncated RPS pipeline")
@@ -455,9 +502,11 @@ def fig_high_fidelity(out_dir: Path, seed: int, quick: bool):
 def fig_step_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     """Progressive decay vs abrupt step drop with the early trigger.
 
-    Cost is the global formation cost evaluated at the true health on
-    each diagnosis tick's optimizer target (the same evaluation the
-    utilisation band uses), so both scenarios are directly comparable.
+    Cost is the global formation cost at the *true* health evaluated on
+    the per-step physical formation state, so the plot shows the real
+    transient (rise, peak, recovery) rather than coarse diagnosis-tick
+    samples. The measured overshoot and recovery are annotated on the
+    step trace.
     """
     n_steps = 300 if quick else 500
     onset = min(Config.STEP_FAULT_ONSET, n_steps // 2)
@@ -467,34 +516,55 @@ def fig_step_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bo
         onset_time=onset,
         health_after=Config.STEP_FAULT_HEALTH_AFTER,
     )
-    _, log_p = runner.run_proposed(prog, seed)
+    _, log_p = runner.run_proposed(prog, seed, trace_positions=True)
     _, log_s = runner.run_proposed(
         step, seed,
         early_trigger_threshold=Config.STEP_FAULT_TRIGGER,
         early_trigger_check_every=Config.STEP_FAULT_CHECK_EVERY,
+        trace_positions=True,
     )
 
     def trace(log, profile):
-        return [
+        steps = log.position_step_trace
+        return steps, [
             formation_cost_global(
-                target, profile[:, min(tick, profile.shape[1] - 1)],
+                positions, profile[:, min(step, profile.shape[1] - 1)],
                 runner.desired_positions, runner.edges,
                 beta=runner.beta, gamma=runner.gamma,
             )
-            for target, tick in zip(
-                log.optimiser_targets, log.diag_steps, strict=False
+            for step, positions in zip(
+                steps, log.position_trace, strict=False
             )
         ]
 
-    xs = list(range(0, n_steps, max(1, n_steps // 10)))
+    xs_p, ys_p = trace(log_p, prog)
+    xs_s, ys_s = trace(log_s, step)
+    ys_s_arr = np.asarray(ys_s)
+    steady = float(np.mean(ys_s_arr[-max(1, len(ys_s_arr) // 10):]))
+    post = ys_s_arr[len(ys_s_arr) - (n_steps - onset):]
+    peak_idx = int(np.argmax(post))
+    peak = float(post[peak_idx])
+    overshoot = 100.0 * (peak - steady) / steady if steady > 0 else float("nan")
+    recovery = -1
+    for idx in range(peak_idx, len(post)):
+        if post[idx] <= 1.05 * steady:
+            recovery = idx
+            break
+
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    ax.plot(xs, trace(log_p, prog), "o-", lw=1.2, label="Progressive degradation")
-    ax.plot(xs, trace(log_s, step), "s-", lw=1.2, label="Step fault (early trigger)")
+    ax.plot(xs_p, ys_p, lw=1.4, label="Progressive degradation")
+    ax.plot(xs_s, ys_s, lw=1.4, label="Step fault (early trigger)")
     ax.axvline(onset, color="gray", ls="--", lw=0.8)
-    ax.text(onset, ax.get_ylim()[1], " step fault", fontsize=8, va="top")
+    ax.annotate(
+        f"overshoot {overshoot:.0f}%\nrecovery {recovery} steps",
+        xy=(onset + peak_idx, peak),
+        xytext=(onset + 0.25 * (n_steps - onset), peak + 0.15 * peak),
+        fontsize=8,
+        arrowprops=dict(arrowstyle="->", lw=0.8),
+    )
     ax.set_xlabel("simulation step")
-    ax.set_ylabel("global cost (normalized target)")
-    ax.set_title("Step-fault response")
+    ax.set_ylabel("global cost at true health")
+    ax.set_title("Step-fault transient response")
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_step_fault.pdf")
 
