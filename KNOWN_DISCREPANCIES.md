@@ -110,13 +110,16 @@ the τ-b formula on a 2-fault vector.
   manuscript's step-fault experiment, in particular the
   residual-threshold early diagnostic update; the step-fault study
   (and its figure) is therefore outside this release.
-* **§5.5.1 topology mode separation**: paper distinguishes random vs
-  high-weight vs adjacent edge removal by their effect on a
-  consensus-error / formation-tracking metric. The code reports
-  utilisation, which is computed against an Oracle reference that
-  bakes in the true health and is dominated by the fault response
-  rather than by the topology damage. Sweeping the metric instead
-  is the open work item.
+* **§5.5.1 topology mode separation**: the paper distinguishes random
+  vs high-weight vs incident edge removal by their effect on the
+  formation-tracking metric. In this stand-in the three modes do not
+  separate: with utilisation all three read ≈ 0.30, and a
+  constraint-satisfaction sweep over 0–8 removals keeps all three at
+  1.000 — the fault response dominates the topology damage, and the
+  perturbation strengths tested do not induce the paper's ordering.
+  Reproducing the ordering would require a different experiment
+  design; the ledger records the mismatch rather than tuning the
+  perturbation to force a spread.
 * **Statistical significance markers** (`*` and `†` in Table 5–7): the
   paper applies a paired t-test at p<0.05; the code reports mean ± std
   but does not annotate significance. Adding the markers is mechanical
