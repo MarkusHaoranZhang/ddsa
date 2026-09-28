@@ -231,7 +231,11 @@ class ExperimentRunner:
             desired_positions=self.desired_positions,
             edges=self.edges,
             n_diag_intervals=self._N_DIAG_INTERVALS,
-            iters_per_diag=self._ITERS_PER_DIAG,
+            iters_per_diag=(
+                int(message_loss[5])
+                if message_loss and len(message_loss) > 5
+                else self._ITERS_PER_DIAG
+            ),
             alpha=self.alpha,
             gamma=self.gamma,
             beta=self.beta,
@@ -247,6 +251,14 @@ class ExperimentRunner:
             message_loss_edges=message_loss[0] if message_loss else None,
             message_loss_levels=message_loss[1] if message_loss else None,
             message_loss_rebalance=message_loss[2] if message_loss else False,
+            step_optimizer_per_step=(
+                bool(message_loss[3])
+                if message_loss and len(message_loss) > 3 else False
+            ),
+            trace_consensus=(
+                bool(message_loss[4])
+                if message_loss and len(message_loss) > 4 else False
+            ),
             isolation_mask=iso_mask,
             isolation_pins=isolation_pins,
             simulator_factory=simulator_factory,
@@ -1115,33 +1127,38 @@ class ExperimentRunner:
         )
 
         loss_levels = communication_loss_levels(n_intervals)
-        # Packet loss corrupts the baselines' raw evidence (single-source
-        # residuals), while the framework's RPSR fusion over all agents is
-        # robust to lossy broadcasts. Per-iteration message dropout models
-        # the packet loss itself; the framework re-balances every realised
-        # mixing operator (Sinkhorn), the baselines do not.
-        def with_loss(fn: Callable[..., Any], rebalance: bool) -> MethodFn:
+        # Manuscript §5.4.2, continuous-tracking protocol (one DIGing
+        # update per simulation step, the paper's 500 iterations) and no
+        # actuator degradation. Through continuous weight attenuation the
+        # framework accounts for the expected throughput, so individual
+        # random packet drops do not perturb its updates; the fixed
+        # methods keep the nominal graph and every dropped message
+        # perturbs them ("its fixed bound cannot adapt to time-varying
+        # loss"). Tuple layout: (edges, levels, rebalance, step_per_step,
+        # trace, iters); an empty edge list disables the per-step dropout.
+        ml_proposed: Any = ([], None, True, True, True, 1)
+        ml_fixed: Any = (edges_to_drop, loss_levels, False, True, True, 1)
+
+        def with_loss(fn: Callable[..., Any], ml: Any, base: Any) -> MethodFn:
             return lambda p, s: fn(
-                p, s,
-                w_base_per_interval=w_seq,
-                message_loss=(edges_to_drop, loss_levels, rebalance),
+                p, s, w_base_per_interval=base, message_loss=ml,
             )
 
         methods: dict[str, MethodFn] = {
-            "Proposed": with_loss(self.run_proposed, True),
+            "Proposed": with_loss(self.run_proposed, ml_proposed, w_seq),
             "Robust DO": lambda p, s: self.run_robust_do(
                 p, s,
-                w_base_per_interval=w_seq,
+                w_base_per_interval=None,
                 loss_per_interval=loss_levels,
-                message_loss=(edges_to_drop, loss_levels, False),
+                message_loss=ml_fixed,
             ),
             "FDI-Reconf": lambda p, s: self.run_fdi(
                 p, s,
-                w_base_per_interval=w_seq,
+                w_base_per_interval=None,
                 loss_per_interval=loss_levels,
-                message_loss=(edges_to_drop, loss_levels, False),
+                message_loss=ml_fixed,
             ),
-            "Oracle": with_loss(self.run_oracle, True),
+            "Oracle": with_loss(self.run_oracle, ml_proposed, w_seq),
         }
         results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):

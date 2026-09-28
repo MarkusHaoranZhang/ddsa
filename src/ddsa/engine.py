@@ -72,6 +72,9 @@ class EngineLog:
     # ``trace_positions`` is set); used by the step-fault transient study.
     position_trace: list[np.ndarray] = field(default_factory=list)
     position_step_trace: list[int] = field(default_factory=list)
+    # Optional per-step DIGing consensus error (only populated when
+    # ``trace_consensus`` is set); used by the scenario-2 variance study.
+    consensus_trace: list[float] = field(default_factory=list)
 
 
 def run_closed_loop(
@@ -101,6 +104,8 @@ def run_closed_loop(
     message_loss_edges: list[tuple[int, int]] | None = None,
     message_loss_levels: np.ndarray | None = None,
     message_loss_rebalance: bool = False,
+    step_optimizer_per_step: bool = False,
+    trace_consensus: bool = False,
     simulator_factory: Callable[[], _SimulatorProtocol] | None = None,
     isolation_mask: np.ndarray | None = None,
     isolation_pins: np.ndarray | None = None,
@@ -310,6 +315,19 @@ def run_closed_loop(
         for inner in range(diag_start + 1, diag_end):
             sim.set_health(health_profile[:, inner])
             sim.step(sim.commanded_control(per_agent_target))
+            if step_optimizer_per_step:
+                # Continuous-tracking protocol: one DIGing update per
+                # simulation step (500 updates over the canonical run).
+                optimiser.optimize(grad, n_iters=1)
+                per_agent_target = optimiser.consensus_estimate()
+                if trace_consensus:
+                    log.consensus_trace.append(
+                        float(
+                            np.linalg.norm(
+                                optimiser.x - optimiser.x.mean(axis=0)
+                            )
+                        )
+                    )
             if trace_positions:
                 log.position_trace.append(sim.get_positions())
                 log.position_step_trace.append(inner)

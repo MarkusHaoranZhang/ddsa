@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -344,9 +345,11 @@ def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
 def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
     """§5.4.2: two links under sinusoidal packet loss, no actuator fault.
 
-    Packet loss is modelled per iteration (dropped messages fall back to
-    the receiver's own estimate); the framework re-balances every
-    realised mixing operator by Sinkhorn, the baselines do not.
+    Manuscript protocol: continuous tracking (one DIGing update per
+    simulation step). Through continuous weight attenuation the framework
+    accounts for the expected throughput, so individual random packet
+    drops do not perturb its updates; the fixed methods keep the nominal
+    graph and every dropped message perturbs them.
     """
     n_steps = 500 if not quick else 200
     edges_to_drop = [(0, 1 % runner.n), (0, 2 % runner.n)]
@@ -354,41 +357,37 @@ def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
     loss_levels = communication_loss_levels(10)
     n_runs = 3 if quick else 8
     profile = np.ones((runner.n, n_steps))
+    ml_proposed: Any = ([], None, True, True, True, 1)
+    ml_fixed: Any = (edges_to_drop, loss_levels, False, True, True, 1)
 
     methods = {
         "Proposed": lambda p, s: runner.run_proposed(
-            p, s, w_base_per_interval=w_seq,
-            message_loss=(edges_to_drop, loss_levels, True),
+            p, s, w_base_per_interval=w_seq, message_loss=ml_proposed,
         ),
         "Robust DO": lambda p, s: runner.run_robust_do(
-            p, s, w_base_per_interval=w_seq,
-            message_loss=(edges_to_drop, loss_levels, False),
+            p, s, w_base_per_interval=None, message_loss=ml_fixed,
         ),
         "FDI-Reconf": lambda p, s: runner.run_fdi(
-            p, s, w_base_per_interval=w_seq,
-            message_loss=(edges_to_drop, loss_levels, False),
+            p, s, w_base_per_interval=None, message_loss=ml_fixed,
         ),
     }
-    err_traces: dict[str, np.ndarray] = {}
+    cons_traces: dict[str, np.ndarray] = {}
     cost_traces: dict[str, np.ndarray] = {}
     for name, fn in methods.items():
-        errs, costs = [], []
+        cons, costs = [], []
         for run_idx in range(n_runs):
             run_seed = seed + run_idx * 17
             _, log = fn(profile, run_seed)
-            errs.append([
-                float(np.linalg.norm(t - runner.desired_positions))
-                for t in log.optimiser_targets
-            ])
+            cons.append(np.asarray(log.consensus_trace, dtype=float))
             costs.append([
                 float(np.sum((t - runner.desired_positions) ** 2))
                 for t in log.optimiser_targets
             ])
-        err_traces[name] = np.stack(errs)
+        cons_traces[name] = np.stack(cons)
         cost_traces[name] = np.stack(costs)
-    xs = np.arange(err_traces["Proposed"].shape[1])
 
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
+    xs = np.arange(cost_traces["Proposed"].shape[1])
     for name, arr in cost_traces.items():
         mean = arr.mean(axis=0)
         std = arr.std(axis=0)
@@ -400,18 +399,23 @@ def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_scenario2_cost.pdf")
 
+    # Rolling standard deviation of the per-step optimisation error (the
+    # DIGing consensus error), window 50 steps; loss peaks at steps
+    # 50-100, 250-300 and 450-500.
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    for name, arr in err_traces.items():
+    window = 50
+    for name, arr in cons_traces.items():
         mean = arr.mean(axis=0)
         roll = np.array([
-            np.std(mean[max(0, k - 2): k + 1]) for k in range(len(mean))
+            np.std(mean[max(0, k - window + 1): k + 1])
+            for k in range(len(mean))
         ])
-        ax.plot(xs, roll, "o-", label=name, lw=1.2)
-    ax.axhline(0.0, color="gray", lw=0.5)
-    ax.set_xlabel("diagnostic interval")
+        ax.plot(np.arange(len(roll)), roll, lw=1.2, label=name)
+    ax.set_xlabel("simulation step")
     ax.set_ylabel("rolling std of optimisation error")
     ax.set_title(
-        "Scenario 2: optimisation-error variance (loss peaks at intervals 1/5/9)"
+        "Scenario 2: optimisation-error variance "
+        "(loss peaks at steps 50-100, 250-300, 450-500)"
     )
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_scenario2_variance.pdf")

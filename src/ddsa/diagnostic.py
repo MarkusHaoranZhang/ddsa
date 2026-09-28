@@ -356,18 +356,17 @@ class RPSDiagnosticModule:
         if total > 0:
             deg_prob = deg_prob / total
         if evidence is not None:
-            # evidence gate: scale the normalised suspicion by the fused
-            # fault-evidence strength, so an all-healthy fleet reports
-            # h -> 1 instead of the 1/N normalisation floor. Deep faults
-            # saturate the gate at 1, leaving the calibrated fault-time
-            # behaviour unchanged.
-            gate = 1.0 / (
-                1.0 + np.exp(
-                    -Config.OPT_EVIDENCE_TEMP
-                    * (float(evidence) - Config.OPT_EVIDENCE_CENTRE)
+            # evidence gate: below the threshold no agent is degraded, so
+            # the estimate is exactly healthy (hard dead-zone) and the
+            # adaptive machinery contributes no self-noise; above it the
+            # suspicion scales smoothly with the fused evidence.
+            x = float(evidence) - Config.OPT_EVIDENCE_CENTRE
+            if x <= 0.0:
+                deg_prob = np.zeros_like(deg_prob)
+            else:
+                deg_prob = deg_prob * (
+                    1.0 - np.exp(-Config.OPT_EVIDENCE_TEMP * x)
                 )
-            )
-            deg_prob = deg_prob * gate
         return np.clip(1.0 - deg_prob, 0.0, 1.0)
 
     def extract_severity_estimate(
