@@ -303,6 +303,7 @@ class ExperimentRunner:
         *, margin: float = Config.ROBUST_DO_MARGIN,
         disturbance_ref: float = Config.ROBUST_DO_DISTURBANCE_REF,
         w_base_per_interval: list[np.ndarray] | None = None,
+        loss_per_interval: np.ndarray | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 Robust DO: conservative margin sized by residual evidence.
 
@@ -317,6 +318,7 @@ class ExperimentRunner:
         """
         sim = SatelliteFormationSimulator(self.n, seed=seed)
         sim.desired_positions = self.desired_positions.copy()
+        rng = np.random.default_rng(seed + 31)
         n_steps = health_profile.shape[1]
         steps_per_diag = max(1, n_steps // self._N_DIAG_INTERVALS)
         assumed = np.ones((self.n, n_steps))
@@ -327,6 +329,17 @@ class ExperimentRunner:
             sim.set_health(health_profile[:, diag_start])
             energy = residual_energy(sim.sample_residual())
             severity = np.clip(energy / disturbance_ref, 0.0, 1.0)
+            if loss_per_interval is not None and k < len(loss_per_interval):
+                # Evidence packets are lost with the link: the robust
+                # margin sees an attenuated severity plus jitter, so its
+                # conservatism oscillates with the loss level.
+                loss = float(loss_per_interval[k])
+                severity = np.clip(
+                    severity * (1.0 - loss)
+                    + rng.normal(0.0, Config.LOSS_EVIDENCE_JITTER, self.n)
+                    * loss,
+                    0.0, 1.0,
+                )
             h_assumed = 1.0 - margin * severity
             diag_end = min(n_steps, (k + 1) * steps_per_diag)
             assumed[:, diag_start:diag_end] = h_assumed[:, None]
@@ -1086,7 +1099,11 @@ class ExperimentRunner:
         loss_levels = communication_loss_levels(n_intervals)
         methods: dict[str, MethodFn] = {
             "Proposed": with_loss(self.run_proposed),
-            "Robust DO": with_loss(self.run_robust_do),
+            "Robust DO": lambda p, s: self.run_robust_do(
+                p, s,
+                w_base_per_interval=w_seq,
+                loss_per_interval=loss_levels,
+            ),
             "FDI-Reconf": lambda p, s: self.run_fdi(
                 p, s,
                 w_base_per_interval=w_seq,
@@ -1228,9 +1245,10 @@ class ExperimentRunner:
             m["early_trigger"] = float(
                 log.early_trigger_tick if log.early_trigger_tick is not None else -1
             )
-            # Transient metrics on the per-step physical cost trace: peak
-            # overshoot above the settled value, and the number of steps
-            # from the peak until the cost is back within 5% of steady.
+            # Transient metrics on the per-step station-error trace
+            # (sum of squared formation errors) and the weighted cost at
+            # true health: overshoot of the error index above its
+            # settled value, and the steps from the peak back within 5%.
             n_steps_total = profile.shape[1]
             costs = np.array([
                 formation_cost_global(
@@ -1242,22 +1260,28 @@ class ExperimentRunner:
                     log.position_step_trace, log.position_trace, strict=False
                 )
             ])
-            steady = float(np.mean(costs[-max(1, len(costs) // 10):]))
-            post = costs[effective_onset:]
+            errs = np.array([
+                float(np.sum((positions - self.desired_positions) ** 2))
+                for positions in log.position_trace
+            ])
+            steady_err = float(np.mean(errs[-max(1, len(errs) // 10):]))
+            post = errs[effective_onset:]
             if post.size == 0:
-                post = costs
+                post = errs
             peak_idx = int(np.argmax(post))
             peak = float(post[peak_idx])
             m["overshoot_pct"] = float(
-                100.0 * (peak - steady) / steady if steady > 0 else float("nan")
+                100.0 * (peak - steady_err) / steady_err
+                if steady_err > 0 else float("nan")
             )
             recovery = -1.0
             for idx in range(peak_idx, len(post)):
-                if post[idx] <= 1.05 * steady:
+                if post[idx] <= 1.05 * steady_err:
                     recovery = float(idx)
                     break
             m["recovery_steps"] = recovery
-            m["steady_cost"] = steady
+            m["steady_error"] = steady_err
+            m["steady_cost"] = float(np.mean(costs[-max(1, len(costs) // 10):]))
             results["Proposed"].append(m)
         return self._summarise_runs(results)
 

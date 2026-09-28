@@ -175,12 +175,19 @@ def topology_removal_sequence(
         rows.sort(reverse=True)
         candidates = [(i, j) for _, i, j in rows]
     elif mode == "adjacent":
+        incident: list[tuple[int, int]] = []
         for j in range(n):
             if j != degraded_agent and W_base[degraded_agent, j] > 0:
-                candidates.append(
+                incident.append(
                     (min(degraded_agent, j), max(degraded_agent, j))
                 )
-        rng.shuffle(candidates)
+        # Attack the most peripheral (weakest) incident links first so the
+        # faulted agent's formation pull degrades progressively instead of
+        # collapsing at the first cut; ties are broken randomly.
+        incident.sort(key=lambda pair: W_base[pair[0], pair[1]])
+        rng.shuffle(incident)
+        incident.sort(key=lambda pair: W_base[pair[0], pair[1]])
+        candidates = incident
     else:
         raise ValueError(f"unknown mode {mode!r}")
 

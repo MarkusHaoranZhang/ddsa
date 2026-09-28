@@ -66,12 +66,17 @@ def _measure_steady_state(
 ) -> float:
     """Run one trajectory at the given rho factor; return tracking error.
 
-    The "error" we measure is the tracking error of the DIGing iterate
-    relative to the *moving* optimum implied by the current health
-    estimate. ``rho_max`` in Theorem 1 bounds the rate beyond which
-    this tracking error can no longer follow the moving optimum, which
-    manifests as a monotonically growing residual against the moving
-    target rather than DIGing internal divergence.
+    The "error" is the tracking error of the DIGing iterate relative to
+    the *moving* optimum: the mean distance between the method's
+    formation target and the Oracle's target at the same diagnosis
+    tick, averaged over the steady tail. ``rho_max`` in Theorem 1
+    bounds the rate beyond which this tracking error can no longer
+    follow the moving optimum, which manifests as a monotonically
+    growing residual rather than DIGing internal divergence.
+
+    Measuring against the Oracle (true-health optimum) keeps the metric
+    independent of the physical formation controller: only the
+    optimisation layer's ability to chase the moving target matters.
 
     ``calibrate_rho_max`` decides divergence by comparing this error
     against the smallest-rho baseline; that judgement lives in the
@@ -80,16 +85,22 @@ def _measure_steady_state(
     eta = rho_factor * Config.CHARACTERISTIC_HEALTH_RATE
     profile, _ = runner.degradation_profile(n_steps, eta=eta, onset_time=0)
     _, log = runner.run_proposed(profile, seed)
+    _, oracle_log = runner.run_oracle(profile, seed)
 
-    # tracking error: ||DIGing iterate - desired_positions||
-    if not log.positions:
+    n_ticks = min(len(log.optimiser_targets), len(oracle_log.optimiser_targets))
+    if n_ticks == 0:
         return float("nan")
-    errs = np.array(
-        [float(np.linalg.norm(p - runner.desired_positions)) for p in log.positions]
+    lags = np.array(
+        [
+            float(np.linalg.norm(
+                log.optimiser_targets[k] - oracle_log.optimiser_targets[k]
+            ))
+            for k in range(n_ticks)
+        ]
     )
-    if not np.all(np.isfinite(errs)):
+    if not np.all(np.isfinite(lags)):
         return float("nan")
-    tail = float(np.mean(errs[-max(1, len(errs) // 4):]))
+    tail = float(np.mean(lags[-max(1, len(lags) // 4):]))
     return tail
 
 

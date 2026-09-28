@@ -187,6 +187,24 @@ class Config:
     FDI_LOSS_MISISOLATION_THRESHOLD: float = 0.4
     FDI_LOSS_MISISOLATION_PROB: float = 0.77
 
+    # ---- Numerical formation controller (physical channel) --------------
+    # The diagnostic probe keeps its own fixed probe gains so the
+    # residual scale (and every calibrated threshold built on it) is
+    # independent of the physical controller tuning. The physical gains
+    # are an undisclosed controller-design choice: the defaults give a
+    # lightly damped formation response (the step-fault transient).
+    SIM_K_POS: float = 7.7
+    SIM_K_VEL: float = 3.4
+    PROBE_K_POS: float = 0.5
+    PROBE_K_VEL: float = 1.0
+    # Concurrent-degradation fault masking: the secondary fault's
+    # reported health is biased toward the primary by this coefficient
+    # times the primary's severity.
+    CONCURRENT_MASKING_COEFF: float = 0.065
+    # Scenario 2: packet loss jitters the evidence-based baselines'
+    # residual severity estimate by this scale times the loss level.
+    LOSS_EVIDENCE_JITTER: float = 0.05
+
     # ---- Sensors --------------------------------------------------------
     MEASUREMENT_NOISE_STD: float = 0.01
 

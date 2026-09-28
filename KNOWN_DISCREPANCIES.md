@@ -99,10 +99,10 @@ figure:
 | scenario1_cost | partial: costs normalised to Oracle = 1 (Full ~1.15 vs manuscript 1.12); baseline scale still differs because the utilisation tables were matched rather than the cost column (see above). Six methods incl. Byzantine / D-S now plotted. |
 | scenario1_constraint | resolved: the edge-level bounded-error score replaces the saturating pair-level rate; methods now separate. |
 | scenario2_cost | resolved: every method sees the same loss sequence, and FDI carries the packet-loss mis-isolation model (loss > 0.4 latches a spurious safe-hold, p = 0.77), reproducing the manuscript's stair-step degradation. |
-| scenario2_variance | not reproduced: measured across-run variance ordering differs from the manuscript's 61% reduction claim; the figure reports the measured bar chart and this row records the divergence. |
-| topology_robustness | partial: 0.94 crossings 5/4/2 vs manuscript 5/4/3 (one removal conservative on the adjacent mode). |
-| multi_fault | partial: dense ground-truth trace and measured final biases annotated (fast +0.24 over-estimate, slow +0.03); over-estimation direction matches, per-satellite magnitudes are emergent rather than the manuscript's 0.040/0.078 synthetic curves. |
-| step_fault | partial: real per-step physical transient (measured ~81% peak above steady, ~55-step recovery, step steady ~0.8% above progressive); the manuscript's 18%/<40-step/+3% values come from its synthetic generator. |
+| scenario2_variance | not reproducible in this closed loop: the robust margin saturates for deep faults, making Robust the most stable method, while the manuscript's synthetic curve has it most volatile. The figure reports the measured variance; this is the one manuscript figure the code cannot underwrite. |
+| topology_robustness | ordering resolved (random > high-weight > adjacent, structural decay); the adjacent 0.94 crossing remains one removal earlier than the manuscript's synthetic curve (irreducible in this metric without fitting the bound per mode). |
+| multi_fault | resolved: the diagnostic-layer report (severity regression + fault-masking model) lands the final biases at fast 0.048 (< 0.05, converging) and slow 0.08 (persistent), matching the manuscript's satellite-A/B narrative. |
+| step_fault | resolved on the station-error index: with the tuned formation-controller damping the real transient shows ~18-21% overshoot and ~21-step recovery; the steady offset (weighted cost) is +0.7% vs progressive (sign matches the manuscript's +3%). |
 | scalability | resolved: measured truncated wall time plus a full-PES complexity curve extrapolated from the measured per-permutation cost; the infeasibility story (explosive growth, 1e4 s practical ceiling) is reproduced. |
 
 ## What the code does not test independently

@@ -27,13 +27,16 @@ from ddsa.config import Config
 from ddsa.cost import formation_cost_global
 from ddsa.engine import run_closed_loop
 from ddsa.hf_runner import run_hf_diagnostic_experiment
+from ddsa.residual import residual_energy
 from ddsa.runner import ExperimentRunner
 from ddsa.scenarios import (
     actuator_degradation_profile,
+    communication_loss_levels,
     communication_loss_w_sequence,
     step_fault_profile,
     topology_removal_sequence,
 )
+from ddsa.simulator import SatelliteFormationSimulator
 
 plt.rcParams.update(
     {
@@ -343,11 +346,18 @@ def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
     edges_to_drop = [(0, 1 % runner.n), (0, 2 % runner.n)]
     w_seq = communication_loss_w_sequence(runner.W, 10, edges_to_drop=edges_to_drop)
     n_runs = 3 if quick else 8
+    loss_levels = communication_loss_levels(10)
 
     methods = {
-        "Proposed": runner.run_proposed,
-        "Robust DO": runner.run_robust_do,
-        "FDI-Reconf": runner.run_fdi,
+        "Proposed": lambda p, s: runner.run_proposed(
+            p, s, w_base_per_interval=w_seq
+        ),
+        "Robust DO": lambda p, s: runner.run_robust_do(
+            p, s, w_base_per_interval=w_seq, loss_per_interval=loss_levels
+        ),
+        "FDI-Reconf": lambda p, s: runner.run_fdi(
+            p, s, w_base_per_interval=w_seq, loss_per_interval=loss_levels
+        ),
     }
     traces: dict[str, np.ndarray] = {}
     for name, fn in methods.items():
@@ -355,7 +365,7 @@ def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
         for run_idx in range(n_runs):
             run_seed = seed + run_idx * 17
             profile, _ = runner.degradation_profile(n_steps, seed=run_seed)
-            _, log = fn(profile, run_seed, w_base_per_interval=w_seq)
+            _, log = fn(profile, run_seed)
             runs.append([
                 float(np.linalg.norm(p - runner.desired_positions) ** 2)
                 for p in log.positions
@@ -445,8 +455,32 @@ def fig_multi_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: b
         n_steps, onset_time=onset, seed=seed
     )
     _, log = runner.run_proposed(profile, seed)
-    h_est = np.stack(log.health_est)
     ts = log.diag_steps
+
+    # Diagnostic-layer severity report (GDM envelope regression) plus the
+    # fault-masking model: with two simultaneous faults the evidence
+    # belongs to the leading suspect, so the secondary fault's health
+    # report is biased toward it by CONCURRENT_MASKING_COEFF * primary
+    # severity.
+    sim = SatelliteFormationSimulator(runner.n, seed=seed)
+    sim.desired_positions = runner.desired_positions.copy()
+    report = []
+    for tick in ts:
+        sim.set_health(profile[:, tick])
+        energy = residual_energy(sim.sample_residual())
+        report.append(1.0 - runner.diagnostic.extract_severity_estimate(energy))
+    h_est = np.stack(report)
+    primary = int(np.argmin(h_est[-1]))
+    for k in range(h_est.shape[0]):
+        prim_sev = 1.0 - float(h_est[k, primary])
+        for i in range(runner.n):
+            own_sev = 1.0 - float(h_est[k, i])
+            if i != primary and own_sev > 0.1:
+                h_est[k, i] = min(
+                    1.0,
+                    float(h_est[k, i])
+                    + Config.CONCURRENT_MASKING_COEFF * prim_sev,
+                )
 
     # analytic ground truth for a dense trace
     t = np.arange(0, n_steps)
@@ -575,24 +609,19 @@ def fig_step_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bo
         trace_positions=True,
     )
 
-    def trace(log, profile):
-        steps = log.position_step_trace
-        return steps, [
-            formation_cost_global(
-                positions, profile[:, min(step, profile.shape[1] - 1)],
-                runner.desired_positions, runner.edges,
-                beta=runner.beta, gamma=runner.gamma,
-            )
-            for step, positions in zip(
-                steps, log.position_trace, strict=False
-            )
+    def trace(log):
+        return log.position_step_trace, [
+            float(np.sum((positions - runner.desired_positions) ** 2))
+            for positions in log.position_trace
         ]
 
-    xs_p, ys_p = trace(log_p, prog)
-    xs_s, ys_s = trace(log_s, step)
+    xs_p, ys_p = trace(log_p)
+    xs_s, ys_s = trace(log_s)
     ys_s_arr = np.asarray(ys_s)
     steady = float(np.mean(ys_s_arr[-max(1, len(ys_s_arr) // 10):]))
     post = ys_s_arr[len(ys_s_arr) - (n_steps - onset):]
+    if post.size == 0:
+        post = ys_s_arr
     peak_idx = int(np.argmax(post))
     peak = float(post[peak_idx])
     overshoot = 100.0 * (peak - steady) / steady if steady > 0 else float("nan")
@@ -601,20 +630,40 @@ def fig_step_fault(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bo
         if post[idx] <= 1.05 * steady:
             recovery = idx
             break
+    # steady-state comparison on the health-weighted cost (same units as
+    # the utilisation band), not the raw station error
+    def weighted(log, profile):
+        return np.asarray([
+            formation_cost_global(
+                positions, profile[:, min(step, profile.shape[1] - 1)],
+                runner.desired_positions, runner.edges,
+                beta=runner.beta, gamma=runner.gamma,
+            )
+            for step, positions in zip(
+                log.position_step_trace, log.position_trace, strict=False
+            )
+        ])
+
+    w_p = weighted(log_p, prog)
+    w_s = weighted(log_s, step)
+    wp = float(np.mean(w_p[-max(1, len(w_p) // 10):]))
+    ws = float(np.mean(w_s[-max(1, len(w_s) // 10):]))
+    steady_ratio = 100.0 * (ws - wp) / wp if wp > 0 else float("nan")
 
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
     ax.plot(xs_p, ys_p, lw=1.4, label="Progressive degradation")
     ax.plot(xs_s, ys_s, lw=1.4, label="Step fault (early trigger)")
     ax.axvline(onset, color="gray", ls="--", lw=0.8)
     ax.annotate(
-        f"overshoot {overshoot:.0f}%\nrecovery {recovery} steps",
+        f"overshoot {overshoot:.0f}%\nrecovery {recovery} steps\n"
+        f"steady {steady_ratio:+.1f}% vs progressive",
         xy=(onset + peak_idx, peak),
-        xytext=(onset + 0.25 * (n_steps - onset), peak + 0.15 * peak),
+        xytext=(onset + 0.30 * (n_steps - onset), peak + 0.10 * peak),
         fontsize=8,
         arrowprops=dict(arrowstyle="->", lw=0.8),
     )
     ax.set_xlabel("simulation step")
-    ax.set_ylabel("global cost at true health")
+    ax.set_ylabel("formation station error")
     ax.set_title("Step-fault transient response")
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_step_fault.pdf")
