@@ -1212,9 +1212,10 @@ class ExperimentRunner:
         results: dict[str, list[MetricDict]] = {"Proposed": []}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
+            effective_onset = min(onset_time, n_steps // 2)
             profile, _ = step_fault_profile(
                 self.n, n_steps,
-                onset_time=onset_time,
+                onset_time=effective_onset,
                 health_after=health_after,
             )
             threshold = Config.STEP_FAULT_TRIGGER if early_trigger else None
@@ -1242,7 +1243,9 @@ class ExperimentRunner:
                 )
             ])
             steady = float(np.mean(costs[-max(1, len(costs) // 10):]))
-            post = costs[onset_time:]
+            post = costs[effective_onset:]
+            if post.size == 0:
+                post = costs
             peak_idx = int(np.argmax(post))
             peak = float(post[peak_idx])
             m["overshoot_pct"] = float(
