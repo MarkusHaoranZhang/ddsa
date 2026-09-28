@@ -23,6 +23,7 @@ from collections.abc import Callable
 import numpy as np
 
 from ddsa.config import Config
+from ddsa.utils import sinkhorn_double_stochastic
 
 
 class DIGingOptimizer:
@@ -52,6 +53,48 @@ class DIGingOptimizer:
         self.y = np.zeros((n_agents, n_agents, dim))
         self.grad_prev = np.zeros((n_agents, n_agents, dim))
 
+        # Per-iteration message loss (scenario 2): a dropped transmission
+        # makes the receiver fall back to its own current estimate for
+        # that link. ``_loss_rebalance`` re-projects every realised
+        # mixing operator to double stochasticity (the framework's
+        # re-balancing); without it the row-stochastic-only operator's
+        # average drifts with the loss.
+        self._loss_edges: list[tuple[int, int]] = []
+        self._loss_rate: float = 0.0
+        self._loss_rebalance: bool = False
+
+    def set_message_loss(
+        self,
+        edges: list[tuple[int, int]],
+        rate: float,
+        rebalance: bool,
+    ) -> None:
+        """Configure per-iteration message loss on ``edges``."""
+        self._loss_edges = list(edges)
+        self._loss_rate = float(rate)
+        self._loss_rebalance = bool(rebalance)
+
+    def clear_message_loss(self) -> None:
+        """Disable per-iteration message loss."""
+        self._loss_edges = []
+        self._loss_rate = 0.0
+
+    def _effective_mixing(self) -> np.ndarray:
+        """Realised mixing operator for one iteration under message loss."""
+        if not self._loss_edges or self._loss_rate <= 0.0:
+            return self.W
+        W = self.W.copy()
+        for a, b in self._loss_edges:
+            for i, j in ((a, b), (b, a)):
+                if self._rng.random() < self._loss_rate:
+                    W[i, i] += W[i, j]
+                    W[i, j] = 0.0
+        if self._loss_rebalance:
+            return sinkhorn_double_stochastic(W)
+        rs = W.sum(axis=1, keepdims=True)
+        rs = np.where(rs > 0, rs, 1.0)
+        return W / rs
+
     def step(
         self,
         local_grad_func: Callable[[np.ndarray, int], np.ndarray],
@@ -67,12 +110,13 @@ class DIGingOptimizer:
         grad_curr = np.stack(
             [local_grad_func(self.x[i], i) for i in range(self.n)], axis=0
         )
+        W_eff = self._effective_mixing()
 
         # gradient tracking: y_{i}^{k+1} = sum_j W_{ij} y_j + g_i^{k+1} - g_i^{k}
-        self.y = np.einsum("ij,jkl->ikl", self.W, self.y) + grad_curr - self.grad_prev
+        self.y = np.einsum("ij,jkl->ikl", W_eff, self.y) + grad_curr - self.grad_prev
         self.grad_prev = grad_curr.copy()
         # primal: x_{i}^{k+1} = sum_j W_{ij} x_j - alpha * y_i
-        self.x = np.einsum("ij,jkl->ikl", self.W, self.x) - self.alpha * self.y
+        self.x = np.einsum("ij,jkl->ikl", W_eff, self.x) - self.alpha * self.y
         return self.x.copy()
 
     def optimize(

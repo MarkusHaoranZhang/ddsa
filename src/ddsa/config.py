@@ -127,7 +127,7 @@ class Config:
     FDI_SAFE_HOLD_RETREAT: float = 0.27
     DS_SAFE_HOLD_RETREAT: float = 0.32
     BYZ_SAFE_HOLD_RETREAT: float = 0.32
-    BINARY_SAFE_HOLD_RETREAT: float = 0.33
+    BINARY_SAFE_HOLD_RETREAT: float = 0.225
     # Variant A: the fused D-S belief crossing this level triggers the
     # closed-loop hold-reconfiguration, with the ablation's own retreat.
     DS_VARIANT_THRESHOLD: float = 0.5
@@ -204,6 +204,14 @@ class Config:
     # Scenario 2: packet loss jitters the evidence-based baselines'
     # residual severity estimate by this scale times the loss level.
     LOSS_EVIDENCE_JITTER: float = 0.05
+
+    # Evidence gate on the OPT health extraction: the ordered-probability
+    # suspicion is scaled by the fused evidence strength so a healthy
+    # fleet reports h -> 1 instead of the normalisation floor (~7/8 for
+    # N=8). The gate is calibrated so the faulty-agent regime is
+    # unchanged (deep faults saturate the gate at 1).
+    OPT_EVIDENCE_TEMP: float = 20.0
+    OPT_EVIDENCE_CENTRE: float = 0.15
 
     # ---- Sensors --------------------------------------------------------
     MEASUREMENT_NOISE_STD: float = 0.01

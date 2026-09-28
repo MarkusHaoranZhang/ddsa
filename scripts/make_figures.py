@@ -342,64 +342,78 @@ def fig_scenario1(out_dir: Path, runner: ExperimentRunner, seed: int, quick: boo
 
 # ----------------------------------------------------- 8 + 9. scenario 2
 def fig_scenario2(out_dir: Path, runner: ExperimentRunner, seed: int, quick: bool):
+    """§5.4.2: two links under sinusoidal packet loss, no actuator fault.
+
+    Packet loss is modelled per iteration (dropped messages fall back to
+    the receiver's own estimate); the framework re-balances every
+    realised mixing operator by Sinkhorn, the baselines do not.
+    """
     n_steps = 500 if not quick else 200
     edges_to_drop = [(0, 1 % runner.n), (0, 2 % runner.n)]
     w_seq = communication_loss_w_sequence(runner.W, 10, edges_to_drop=edges_to_drop)
-    n_runs = 3 if quick else 8
     loss_levels = communication_loss_levels(10)
+    n_runs = 3 if quick else 8
+    profile = np.ones((runner.n, n_steps))
 
     methods = {
         "Proposed": lambda p, s: runner.run_proposed(
-            p, s, w_base_per_interval=w_seq
+            p, s, w_base_per_interval=w_seq,
+            message_loss=(edges_to_drop, loss_levels, True),
         ),
         "Robust DO": lambda p, s: runner.run_robust_do(
-            p, s, w_base_per_interval=w_seq, loss_per_interval=loss_levels
+            p, s, w_base_per_interval=w_seq,
+            message_loss=(edges_to_drop, loss_levels, False),
         ),
         "FDI-Reconf": lambda p, s: runner.run_fdi(
-            p, s, w_base_per_interval=w_seq, loss_per_interval=loss_levels
+            p, s, w_base_per_interval=w_seq,
+            message_loss=(edges_to_drop, loss_levels, False),
         ),
     }
-    traces: dict[str, np.ndarray] = {}
+    err_traces: dict[str, np.ndarray] = {}
+    cost_traces: dict[str, np.ndarray] = {}
     for name, fn in methods.items():
-        runs = []
+        errs, costs = [], []
         for run_idx in range(n_runs):
             run_seed = seed + run_idx * 17
-            profile, _ = runner.degradation_profile(n_steps, seed=run_seed)
             _, log = fn(profile, run_seed)
-            runs.append([
-                float(np.linalg.norm(p - runner.desired_positions) ** 2)
-                for p in log.positions
+            errs.append([
+                float(np.linalg.norm(t - runner.desired_positions))
+                for t in log.optimiser_targets
             ])
-        traces[name] = np.stack(runs)  # (n_runs, n_ticks)
-    xs = np.arange(traces["Proposed"].shape[1])
+            costs.append([
+                float(np.sum((t - runner.desired_positions) ** 2))
+                for t in log.optimiser_targets
+            ])
+        err_traces[name] = np.stack(errs)
+        cost_traces[name] = np.stack(costs)
+    xs = np.arange(err_traces["Proposed"].shape[1])
 
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    for name, arr in traces.items():
+    for name, arr in cost_traces.items():
         mean = arr.mean(axis=0)
         std = arr.std(axis=0)
         ax.plot(xs, mean, "o-", label=name, lw=1.2)
         ax.fill_between(xs, mean - std, mean + std, alpha=0.15)
     ax.set_xlabel("diagnostic interval")
-    ax.set_ylabel("formation tracking cost")
-    ax.set_title("Scenario 2: communication-link degradation")
+    ax.set_ylabel("formation cost")
+    ax.set_title("Scenario 2: communication-link degradation (no actuator fault)")
     ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_scenario2_cost.pdf")
 
-    # Across-run cost variance under the shared intermittent-loss
-    # sequence (second half of the run). Reported as measured; the
-    # manuscript's variance-reduction narrative comes from its synthetic
-    # generator and is not reproduced by the closed loop (see
-    # KNOWN_DISCREPANCIES.md).
     fig, ax = plt.subplots(figsize=(5.5, 3.2))
-    names = list(traces.keys())
-    values = []
-    for name in names:
-        arr = traces[name]
-        half = arr.shape[1] // 2
-        values.append(float(arr[:, half:].var(axis=0).mean()))
-    ax.bar(names, values)
-    ax.set_ylabel("mean across-run cost variance")
-    ax.set_title("Scenario 2: cost variance under intermittent loss")
+    for name, arr in err_traces.items():
+        mean = arr.mean(axis=0)
+        roll = np.array([
+            np.std(mean[max(0, k - 2): k + 1]) for k in range(len(mean))
+        ])
+        ax.plot(xs, roll, "o-", label=name, lw=1.2)
+    ax.axhline(0.0, color="gray", lw=0.5)
+    ax.set_xlabel("diagnostic interval")
+    ax.set_ylabel("rolling std of optimisation error")
+    ax.set_title(
+        "Scenario 2: optimisation-error variance (loss peaks at intervals 1/5/9)"
+    )
+    ax.legend(fontsize=8)
     _save(fig, out_dir, "fig_scenario2_variance.pdf")
 
 

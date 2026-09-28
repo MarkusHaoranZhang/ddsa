@@ -322,7 +322,9 @@ class RPSDiagnosticModule:
 
     # ----------------------------- ordered probability transformation
     def extract_health_estimate(
-        self, fused_pmf: dict[tuple[int, ...], float]
+        self,
+        fused_pmf: dict[tuple[int, ...], float],
+        evidence: float | None = None,
     ) -> np.ndarray:
         """OPT: per-agent health = 1 - P_OPT(theta_j) (Eq. 10 of the paper).
 
@@ -353,6 +355,19 @@ class RPSDiagnosticModule:
         total = deg_prob.sum()
         if total > 0:
             deg_prob = deg_prob / total
+        if evidence is not None:
+            # evidence gate: scale the normalised suspicion by the fused
+            # fault-evidence strength, so an all-healthy fleet reports
+            # h -> 1 instead of the 1/N normalisation floor. Deep faults
+            # saturate the gate at 1, leaving the calibrated fault-time
+            # behaviour unchanged.
+            gate = 1.0 / (
+                1.0 + np.exp(
+                    -Config.OPT_EVIDENCE_TEMP
+                    * (float(evidence) - Config.OPT_EVIDENCE_CENTRE)
+                )
+            )
+            deg_prob = deg_prob * gate
         return np.clip(1.0 - deg_prob, 0.0, 1.0)
 
     def extract_severity_estimate(
@@ -449,5 +464,13 @@ class RPSDiagnosticModule:
         for i in range(self.n):
             local_pmfs.append(self.generate_local_pmf(i, residual_matrix[i]))
         fused = self.fuse_pmfs(local_pmfs)
-        h_hat = self.extract_health_estimate(fused)
+        memberships = np.stack(
+            [
+                self.compute_memberships(residual_matrix[i], i)
+                for i in range(self.n)
+            ],
+            axis=0,
+        )
+        evidence = float(np.mean(np.max(memberships, axis=1)))
+        h_hat = self.extract_health_estimate(fused, evidence=evidence)
         return h_hat, local_pmfs, fused

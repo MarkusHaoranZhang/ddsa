@@ -97,6 +97,10 @@ def run_closed_loop(
     early_trigger_threshold: float | None = None,
     early_trigger_check_every: int = 5,
     trace_positions: bool = False,
+    restart_optimizer: bool = False,
+    message_loss_edges: list[tuple[int, int]] | None = None,
+    message_loss_levels: np.ndarray | None = None,
+    message_loss_rebalance: bool = False,
     simulator_factory: Callable[[], _SimulatorProtocol] | None = None,
     isolation_mask: np.ndarray | None = None,
     isolation_pins: np.ndarray | None = None,
@@ -207,6 +211,19 @@ def run_closed_loop(
         # ------------------ 3. adapt the mixing matrix ------------------
         W_tilde = adapt_mixing_matrix(W_base_now, h_hat) if use_w_adaptation else W_base_now
         optimiser.set_mixing_matrix(W_tilde)
+        if restart_optimizer:
+            # Cold start each diagnosis interval: the per-interval residual
+            # after the fixed iteration budget then reflects the quality of
+            # the interval's effective graph (scenario 2).
+            optimiser.reset()
+        if message_loss_levels is not None and k < len(message_loss_levels):
+            optimiser.set_message_loss(
+                message_loss_edges or [],
+                float(message_loss_levels[k]),
+                message_loss_rebalance,
+            )
+        else:
+            optimiser.clear_message_loss()
 
         # ------------------ 4. distributed optimisation -----------------
         # If an isolation mask is supplied, agents flagged True at this

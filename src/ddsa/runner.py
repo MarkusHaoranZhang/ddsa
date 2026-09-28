@@ -207,6 +207,8 @@ class ExperimentRunner:
         early_trigger_threshold: float | None = None,
         early_trigger_check_every: int = 5,
         trace_positions: bool = False,
+        restart_optimizer: bool = False,
+        message_loss: tuple[list[tuple[int, int]], np.ndarray, bool] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """Single entry point for every engine-driven method.
 
@@ -241,6 +243,10 @@ class ExperimentRunner:
             early_trigger_threshold=early_trigger_threshold,
             early_trigger_check_every=early_trigger_check_every,
             trace_positions=trace_positions,
+            restart_optimizer=restart_optimizer,
+            message_loss_edges=message_loss[0] if message_loss else None,
+            message_loss_levels=message_loss[1] if message_loss else None,
+            message_loss_rebalance=message_loss[2] if message_loss else False,
             isolation_mask=iso_mask,
             isolation_pins=isolation_pins,
             simulator_factory=simulator_factory,
@@ -259,6 +265,8 @@ class ExperimentRunner:
         early_trigger_threshold: float | None = None,
         early_trigger_check_every: int = 5,
         trace_positions: bool = False,
+        restart_optimizer: bool = False,
+        message_loss: tuple[list[tuple[int, int]], np.ndarray, bool] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """Proposed method: RPSGM + RPSR + OPT + Sinkhorn-adapted DIGing.
 
@@ -283,6 +291,8 @@ class ExperimentRunner:
             early_trigger_threshold=early_trigger_threshold,
             early_trigger_check_every=early_trigger_check_every,
             trace_positions=trace_positions,
+            restart_optimizer=restart_optimizer,
+            message_loss=message_loss,
         )
         m["kendall_tau"] = self._severity_ranking_tau(seed)
         return m, log
@@ -290,12 +300,16 @@ class ExperimentRunner:
     def run_oracle(
         self, health_profile: np.ndarray, seed: int,
         *, w_base_per_interval: list[np.ndarray] | None = None,
+        restart_optimizer: bool = False,
+        message_loss: tuple[list[tuple[int, int]], np.ndarray, bool] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """Oracle baseline: closed loop driven by ground-truth health."""
         # Override = ground truth; engine bypasses RPS.
         return self._run_engine_method(
             health_profile, seed, override=health_profile, use_w_adaptation=True,
             w_base_per_interval=w_base_per_interval,
+            restart_optimizer=restart_optimizer,
+            message_loss=message_loss,
         )
 
     def run_robust_do(
@@ -304,6 +318,8 @@ class ExperimentRunner:
         disturbance_ref: float = Config.ROBUST_DO_DISTURBANCE_REF,
         w_base_per_interval: list[np.ndarray] | None = None,
         loss_per_interval: np.ndarray | None = None,
+        restart_optimizer: bool = False,
+        message_loss: tuple[list[tuple[int, int]], np.ndarray, bool] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 Robust DO: conservative margin sized by residual evidence.
 
@@ -346,6 +362,8 @@ class ExperimentRunner:
         m, log = self._run_engine_method(
             health_profile, seed, override=assumed, use_w_adaptation=False,
             w_base_per_interval=w_base_per_interval,
+            restart_optimizer=restart_optimizer,
+            message_loss=message_loss,
         )
         # Robust DO does not estimate health; report diagnostic metrics
         # as NaN so summaries can render "—" rather than a misleading 0.
@@ -357,6 +375,8 @@ class ExperimentRunner:
         self, health_profile: np.ndarray, seed: int,
         *, w_base_per_interval: list[np.ndarray] | None = None,
         loss_per_interval: np.ndarray | None = None,
+        restart_optimizer: bool = False,
+        message_loss: tuple[list[tuple[int, int]], np.ndarray, bool] | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 FDI-Reconf: residual-energy threshold isolation + reconfiguration."""
         # Per §5.1.2: residual-energy threshold isolates degraded agents
@@ -371,6 +391,8 @@ class ExperimentRunner:
             override=override, iso_mask=iso_mask, isolation_pins=pins,
             use_w_adaptation=True,
             w_base_per_interval=w_base_per_interval,
+            restart_optimizer=restart_optimizer,
+            message_loss=message_loss,
         )
         # FDI emits a binary {0, 1} mask, not a continuous health
         # estimate; diagnostic-layer metrics are not applicable.
@@ -801,7 +823,6 @@ class ExperimentRunner:
             health_profile, seed,
             override=ones_h, iso_mask=iso_mask, isolation_pins=pins,
             use_w_adaptation=False,
-            w_base_per_interval=w_base_per_interval,
         )
         # Byzantine never estimates health; report diagnostic metrics
         # as NaN so summaries can render "—" rather than a misleading 0.
@@ -1093,28 +1114,40 @@ class ExperimentRunner:
             self.W, n_intervals, edges_to_drop=edges_to_drop
         )
 
-        def with_loss(fn: Callable[..., Any]) -> MethodFn:
-            return lambda p, s: fn(p, s, w_base_per_interval=w_seq)
-
         loss_levels = communication_loss_levels(n_intervals)
+        # Packet loss corrupts the baselines' raw evidence (single-source
+        # residuals), while the framework's RPSR fusion over all agents is
+        # robust to lossy broadcasts. Per-iteration message dropout models
+        # the packet loss itself; the framework re-balances every realised
+        # mixing operator (Sinkhorn), the baselines do not.
+        def with_loss(fn: Callable[..., Any], rebalance: bool) -> MethodFn:
+            return lambda p, s: fn(
+                p, s,
+                w_base_per_interval=w_seq,
+                message_loss=(edges_to_drop, loss_levels, rebalance),
+            )
+
         methods: dict[str, MethodFn] = {
-            "Proposed": with_loss(self.run_proposed),
+            "Proposed": with_loss(self.run_proposed, True),
             "Robust DO": lambda p, s: self.run_robust_do(
                 p, s,
                 w_base_per_interval=w_seq,
                 loss_per_interval=loss_levels,
+                message_loss=(edges_to_drop, loss_levels, False),
             ),
             "FDI-Reconf": lambda p, s: self.run_fdi(
                 p, s,
                 w_base_per_interval=w_seq,
                 loss_per_interval=loss_levels,
+                message_loss=(edges_to_drop, loss_levels, False),
             ),
-            "Oracle": with_loss(self.run_oracle),
+            "Oracle": with_loss(self.run_oracle, True),
         }
         results: dict[str, list[MetricDict]] = {name: [] for name in methods}
         for run_idx in range(n_runs):
             seed = self.seed + run_idx * 1009
-            profile, _ = self.degradation_profile(n_steps, eta=eta, seed=seed)
+            # manuscript §5.4.2: no actuator degradation in this scenario
+            profile = np.ones((self.n, n_steps))
             for name, fn in methods.items():
                 m, _ = fn(profile, seed)
                 results[name].append(m)
