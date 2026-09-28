@@ -39,6 +39,26 @@ def actuator_degradation_profile(
 
 
 # --------------------------------------------------------- Scenario 2
+def communication_loss_levels(
+    n_intervals: int,
+    *,
+    period: int = 4,
+    loss_min: float = 0.1,
+    loss_max: float = 0.6,
+) -> np.ndarray:
+    """Sinusoidal packet-loss level per diagnosis interval.
+
+    The same levels drive ``communication_loss_w_sequence``; keeping the
+    level curve as a first-class output lets packet-loss-sensitive
+    baselines (e.g. FDI's residual broadcast) consume the level rather
+    than reverse-engineering it from the mixing matrix.
+    """
+    k = np.arange(n_intervals)
+    return (loss_max + loss_min) / 2 + (loss_max - loss_min) / 2 * np.sin(
+        2 * np.pi * k / period
+    )
+
+
 def communication_loss_w_sequence(
     W_base: np.ndarray,
     n_intervals: int,

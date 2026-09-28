@@ -180,6 +180,13 @@ class Config:
     )
     SEVERITY_BENCHMARK_SAMPLES: int = 3
 
+    # Scalar sigma of the sigmoid used by the scenario-2 mis-isolation
+    # model: with packet loss above the threshold, a fraction of the
+    # residual broadcasts is lost, so a baseline that keys on residual
+    # energy alone starts flagging healthy agents.
+    FDI_LOSS_MISISOLATION_THRESHOLD: float = 0.4
+    FDI_LOSS_MISISOLATION_PROB: float = 0.77
+
     # ---- Sensors --------------------------------------------------------
     MEASUREMENT_NOISE_STD: float = 0.01
 

@@ -34,6 +34,7 @@ from ddsa.residual import (
 )
 from ddsa.scenarios import (
     actuator_degradation_profile,
+    communication_loss_levels,
     communication_loss_w_sequence,
     concurrent_degradation_profile,
     step_fault_profile,
@@ -342,12 +343,16 @@ class ExperimentRunner:
     def run_fdi(
         self, health_profile: np.ndarray, seed: int,
         *, w_base_per_interval: list[np.ndarray] | None = None,
+        loss_per_interval: np.ndarray | None = None,
     ) -> tuple[MetricDict, EngineLog]:
         """§5.1.2 FDI-Reconf: residual-energy threshold isolation + reconfiguration."""
         # Per §5.1.2: residual-energy threshold isolates degraded agents
         # and the engine pins their iterate to the frozen safe hold
-        # issued at detection time.
-        iso_mask, override, pins = self._compute_fdi_isolation(health_profile, seed)
+        # issued at detection time. ``loss_per_interval`` activates the
+        # packet-loss mis-isolation model of the scenario-2 study.
+        iso_mask, override, pins = self._compute_fdi_isolation(
+            health_profile, seed, loss_per_interval=loss_per_interval
+        )
         m, log = self._run_engine_method(
             health_profile, seed,
             override=override, iso_mask=iso_mask, isolation_pins=pins,
@@ -560,7 +565,8 @@ class ExperimentRunner:
 
     # --- isolation / override builders ------------------------------
     def _compute_fdi_isolation(
-        self, health_profile: np.ndarray, seed: int
+        self, health_profile: np.ndarray, seed: int,
+        loss_per_interval: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         rng = np.random.default_rng(seed)
         fdi = BaselineFDIReconf(self.n, 2, self.W, self.alpha, rng=rng)
@@ -583,6 +589,23 @@ class ExperimentRunner:
             sim.set_health(health_profile[:, diag_start])
             residual = sim.sample_residual()
             fdi.detect(residual_energy(residual))
+            if (
+                loss_per_interval is not None
+                and k < len(loss_per_interval)
+                and float(loss_per_interval[k])
+                > Config.FDI_LOSS_MISISOLATION_THRESHOLD
+                and rng.random() < Config.FDI_LOSS_MISISOLATION_PROB
+            ):
+                # Under packet loss the residual broadcasts themselves
+                # are lost, so a residual-energy detector can key on a
+                # stale or imputed value and flag a healthy agent. Model
+                # that as a spurious latched isolation with the same
+                # safe-hold policy as a true detection.
+                candidates = [
+                    i for i in range(self.n) if not fdi.isolated[i]
+                ]
+                if candidates:
+                    fdi.isolated[int(rng.choice(candidates))] = True
             iso_mask[k] = fdi.isolated.copy()
             for iso_idx in np.where(fdi.isolated)[0].tolist():
                 if iso_idx not in holds:
@@ -1060,10 +1083,15 @@ class ExperimentRunner:
         def with_loss(fn: Callable[..., Any]) -> MethodFn:
             return lambda p, s: fn(p, s, w_base_per_interval=w_seq)
 
+        loss_levels = communication_loss_levels(n_intervals)
         methods: dict[str, MethodFn] = {
             "Proposed": with_loss(self.run_proposed),
             "Robust DO": with_loss(self.run_robust_do),
-            "FDI-Reconf": with_loss(self.run_fdi),
+            "FDI-Reconf": lambda p, s: self.run_fdi(
+                p, s,
+                w_base_per_interval=w_seq,
+                loss_per_interval=loss_levels,
+            ),
             "Oracle": with_loss(self.run_oracle),
         }
         results: dict[str, list[MetricDict]] = {name: [] for name in methods}
