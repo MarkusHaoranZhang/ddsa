@@ -419,7 +419,7 @@ class ExperimentRunner:
                 break
             flagged |= override[:, diag_start] < Config.DS_VARIANT_THRESHOLD
             iso_mask[k] = flagged
-            for iso_idx in np.where(flagged)[0]:
+            for iso_idx in np.where(flagged)[0].tolist():
                 if iso_idx not in holds:
                     holds[iso_idx] = (
                         1.0 - Config.DS_VARIANT_SAFE_HOLD_RETREAT
@@ -525,7 +525,7 @@ class ExperimentRunner:
             binary_profile[:, diag_start:diag_end] = binarised[:, None]
             flagged |= binarised == 0.0
             iso_mask[k] = flagged
-            for iso_idx in np.where(flagged)[0]:
+            for iso_idx in np.where(flagged)[0].tolist():
                 if iso_idx not in holds:
                     holds[iso_idx] = (
                         1.0 - Config.BINARY_SAFE_HOLD_RETREAT
@@ -572,7 +572,7 @@ class ExperimentRunner:
             residual = sim.sample_residual()
             fdi.detect(residual_energy(residual))
             iso_mask[k] = fdi.isolated.copy()
-            for iso_idx in np.where(fdi.isolated)[0]:
+            for iso_idx in np.where(fdi.isolated)[0].tolist():
                 if iso_idx not in holds:
                     # Reconfiguration is a one-shot command issued at
                     # detection time: the isolated agent is sent to a
@@ -651,7 +651,7 @@ class ExperimentRunner:
             below_count = np.where(below, below_count + 1, 0)
             isolated |= below_count >= commit_intervals
             iso_mask[k] = isolated.copy()
-            for iso_idx in np.where(isolated)[0]:
+            for iso_idx in np.where(isolated)[0].tolist():
                 if iso_idx not in holds:
                     holds[iso_idx] = (
                         1.0 - Config.DS_SAFE_HOLD_RETREAT
@@ -740,7 +740,7 @@ class ExperimentRunner:
             outside_count = np.where(outlier, outside_count + 1, 0)
             isolated |= outside_count >= Config.BYZ_COMMIT_INTERVALS
             iso_mask[k] = isolated.copy()
-            for iso_idx in np.where(isolated)[0]:
+            for iso_idx in np.where(isolated)[0].tolist():
                 if iso_idx not in holds:
                     holds[iso_idx] = (
                         1.0 - Config.BYZ_SAFE_HOLD_RETREAT
