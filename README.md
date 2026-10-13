@@ -2,9 +2,10 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20434143.svg)](https://doi.org/10.5281/zenodo.20434143)
 
-Companion code for *Diagnosis-Driven Structural Adaptation: A
-Closed-Loop Architecture for Elastic Degradation in Satellite Formation Control*
-(Haoran Zhang, Lining Xing et al., 2025).
+Companion code for *Diagnosis-Driven Structural Adaptation of
+Distributed Optimization: A Closed-Loop Architecture for Elastic
+Degradation in Spacecraft Formation Control* (Haoran Zhang and
+Lining Xing).
 
 > **Read first**: [`STATUS.md`](STATUS.md) lists every paper section
 > and what code path implements it. [`KNOWN_DISCREPANCIES.md`](KNOWN_DISCREPANCIES.md)
