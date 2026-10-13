@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ``CITATION.cff``) synchronized with the final manuscript title
   (…*of Distributed Optimization: … in Spacecraft Formation Control*)
   and the two-author byline (Haoran Zhang and Lining Xing); the
-  preferred citation in ``CITATION.cff`` now matches the manuscript.
+  preferred citation and the author list in ``CITATION.cff`` now
+  match the manuscript.
 
 ### Fixed
 

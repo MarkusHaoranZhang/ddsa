@@ -14,26 +14,6 @@ authors:
     family-names: Xing
     email: lnxing@xidian.edu.cn
     affiliation: Xidian University
-  - given-names: Zhijie
-    family-names: Zhou
-    email: zhouzj04@tsinghua.org.cn
-    affiliation: Harbin Normal University
-  - given-names: Guohui
-    family-names: Zhou
-    email: zhouguohui@hrbnu.edu.cn
-    affiliation: Harbin Normal University
-  - given-names: Wei
-    family-names: He
-    email: hewei@hrbnu.edu.cn
-    affiliation: Harbin Normal University
-  - given-names: Yuanlong
-    family-names: Zhang
-    email: zhangyl_0728@163.com
-    affiliation: National University of Defense Technology
-  - given-names: Jun
-    family-names: Li
-    email: jli@hnie.edu.cn
-    affiliation: Hunan Institute of Engineering
 repository-code: 'https://github.com/MarkusHaoranZhang/ddsa'
 license: MIT
 version: 0.1.0
