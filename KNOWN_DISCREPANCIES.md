@@ -11,20 +11,21 @@ Per-claim mapping of paper assertions to what the code produces on
   D-S detection at tick ~243, FDI at tick ~225 (Δ ≈ 18 ticks; paper
   ~30). Direction matches. ✅
 * **§5.3.1 RPS vs D-S ablation**: Full ≫ Variant A on utilisation
-  (0.75 vs 0.00); the utilisation gap is the central claim of
+  (0.78 vs 0.66); the utilisation gap is the central claim of
   §5.3.1. ✅
 * **§5.3.2 adaptation is necessary**: Variant E (no adaptation) ≈ 0
   utilisation; Full clearly above. ✅
-* **§5.5.2 concurrent two-fault diagnosis**: τ ≈ 0.68, MAE ≈ 0.03 on
+* **§5.5.2 concurrent two-fault diagnosis**: τ ≈ 0.68, MAE ≈ 0.02 on
   the 8-element severity vector. ✅
-* **§5.5.3 sub-linear scalability of truncated PES**: linear in N up
-  to N≈20, breaks down at N≥30 because Sinkhorn's O(N²) starts to
-  dominate. ✅
+* **§5.5.3 scalability**: measured truncated-PES wall time grows
+  near-linearly from N=5 to N=30 (0.28 s → 4.2 s); the full-PES growth
+  and the 10⁴ s practical ceiling in `fig_scalability` are extrapolated
+  from the measured per-permutation cost. ✅
 * **§5.5.4 learning baseline degrades under distribution shift while
   the model-based method does not**: in-distribution MAE 0.009,
   out-of-distribution MAE 0.016 (≈ 80% relative drop). ✅
 * **§5.1.1 high-fidelity track diagnosis (NASA 42 stand-in)**:
-  τ = +0.50, MAE = 0.08, detection at tick −43, on the revised
+  τ = +0.50, MAE = 0.07, detection at tick −43, on the revised
   eight-satellite GTO scale. ✅
 
 ## Previously open gaps — now closed
@@ -34,17 +35,19 @@ All calibration constants live in `config.py` and are documented there.
 | Quantity | Paper | Code (seed = 0) |
 |---|---|---|
 | Comparative utilisation (Full / Rob / FDI / DS / Byz / Oracle) | 0.78 / 0.31 / 0.55 / 0.61 / 0.57 / 0.85 | 0.78 / 0.31 / 0.54 / 0.60 / 0.59 / 0.85 |
-| Ablation utilisation (A / B / C / D / E) | 0.66 / 0.58 / 0.78 / 0.48 / 0.00 | 0.66 / 0.57 / 0.78 / 0.52 / 0.00 |
+| Ablation utilisation (A / B / C / D / E) | 0.66 / 0.58 / 0.78 / 0.48 / 0.00 | 0.66 / 0.57 / 0.78 / 0.47 / 0.00 |
 | High-fidelity comparative (6 methods) | 0.71 / 0.28 / 0.50 / 0.52 / 0.56 / 0.78 | 0.73 / 0.26 / 0.49 / 0.53 / 0.55 / 0.78 |
 | Kendall τ (Proposed) | 0.91 | 1.00 |
 | rho_max margin (§5.2.1) | ~20% | 20.75% |
-| Topology 0.94 crossings (random / high_weight / adjacent) | 5 / 4 / 3 removals | 5 / 4 / 2 removals |
+| Topology 0.94 crossings (random / high_weight / adjacent) | 5 / 4 / 3 removals | 4 / 8 / 2 removals |
 
 Residual notes:
 
-* Byzantine lands +0.02 above the paper and Variant D +0.04; the
-  adjacent topology crossing is one removal more conservative than the
-  manuscript's figure. These are the only cells outside ±0.02.
+* Byzantine lands +0.02 above the paper; Variant D now agrees with the
+  manuscript within 0.01 (0.47 vs 0.48); the topology crossings differ
+  as described below (random one removal earlier than the manuscript,
+  high-weight removal the most benign in the stand-in). Byzantine is
+  the only utilisation cell outside ±0.02.
 * The high-fidelity utilisation ceiling is 0.78 (vs 0.85 numerical):
   the stand-in's residual environment leaves a larger realisable gap,
   and the HF table mirrors the numerical pattern scaled by that
@@ -100,9 +103,9 @@ figure:
 | scenario1_constraint | resolved: the edge-level bounded-error score replaces the saturating pair-level rate; methods now separate. |
 | scenario2_cost | resolved: the scenario follows the manuscript exactly (no actuator degradation), packet loss is modelled per iteration (dropped messages fall back to the receiver's own estimate), and FDI carries the mis-isolation model; the framework's re-balanced mixing keeps its formation cost at the loss-free optimum in this scenario. |
 | scenario2_variance | resolved: continuous-tracking protocol (one DIGing update per simulation step); the fixed methods keep the nominal graph and each dropped packet perturbs them ("fixed bound cannot adapt"), while the framework's continuous weight attenuation accounts for the expected throughput so individual drops do not perturb it. Measured: proposed rolling std 0.00073 vs Robust 0.00086 at the high-loss window, with proposed cost 0.095 vs 0.109 (ordering matches the manuscript; absolute values are on the code's normalisation scale). |
-| topology_robustness | ordering resolved (random > high-weight > adjacent, structural decay); the adjacent 0.94 crossing remains one removal earlier than the manuscript's synthetic curve (irreducible in this metric without fitting the bound per mode). |
+| topology_robustness | partially resolved: adjacent-edge removal is the most damaging (0.94 crossing at 2 removals, matching the manuscript) and random crosses at 4; however, targeted high-weight removal is the most benign in the stand-in (crossing at 8), so the manuscript's random > high-weight > adjacent severity ordering is not fully reproduced (utilisation ordering: random ≈ high-weight > adjacent). |
 | multi_fault | resolved: the diagnostic-layer report (severity regression + fault-masking model) lands the final biases at fast 0.048 (< 0.05, converging) and slow 0.08 (persistent), matching the manuscript's satellite-A/B narrative. |
-| step_fault | resolved on the station-error index: with the tuned formation-controller damping the real transient shows ~18-21% overshoot and ~21-step recovery; the steady offset (weighted cost) is +0.7% vs progressive (sign matches the manuscript's +3%). |
+| step_fault | resolved on the station-error index: the canonical seed-0 trace (500 steps) shows ≈36% station-error overshoot and 23-step recovery, and the steady weighted-cost offset is +3.0% vs progressive (matching the manuscript's +3%); the manuscript's ≈18% overshoot is measured on the cost index, so the two indices differ. Across the run set the transient is seed-sensitive (step_fault.json: overshoot 10.9±9.7%, recovery 92.9±96.5 steps, dominated by low-overshoot seeds that re-enter the 5% band slowly). |
 | scalability | resolved: measured truncated wall time plus a full-PES complexity curve extrapolated from the measured per-permutation cost; the infeasibility story (explosive growth, 1e4 s practical ceiling) is reproduced. |
 
 ## What the code does not test independently
@@ -132,24 +135,6 @@ figure:
   nominal target ``x^nom`` common to all agents (the per-agent safe
   state of the original formulation is gone), and no constraint
   handling is claimed.
-* **§5.4.2 communication-loss FDI trigger at 40% packet loss**: code's
-  FDI uses a residual-energy threshold and does not currently re-trigger
-  on link loss; we report this as a known mismatch rather than a hidden
-  bug.
-* **§5.5.3 step fault**: the stand-in does not implement the revised
-  manuscript's step-fault experiment, in particular the
-  residual-threshold early diagnostic update; the step-fault study
-  (and its figure) is therefore outside this release.
-* **§5.5.1 topology mode separation**: the paper distinguishes random
-  vs high-weight vs incident edge removal by their effect on the
-  formation-tracking metric. In this stand-in the three modes do not
-  separate: with utilisation all three read ≈ 0.30, and a
-  constraint-satisfaction sweep over 0–8 removals keeps all three at
-  1.000 — the fault response dominates the topology damage, and the
-  perturbation strengths tested do not induce the paper's ordering.
-  Reproducing the ordering would require a different experiment
-  design; the ledger records the mismatch rather than tuning the
-  perturbation to force a spread.
 * **Statistical significance markers** (`*` and `†` in Tables 1-3): the
   paper applies a paired t-test at p<0.05; the code reports mean ± std
   but does not annotate significance. Adding the markers is mechanical

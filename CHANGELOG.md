@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were regenerated at seed 0.
 * Repository titles updated to the submission title (…*in Satellite
   Formation Control*) across README, STATUS, and CITATION.cff.
+* Reference numbers in ``README.md`` and ``KNOWN_DISCREPANCIES.md``
+  reconciled with a fresh seed-0 full run (Variant D 0.47, topology
+  0.94 crossings 4 / 8 / 2, step-fault and HF diagnostics); three
+  stale "not independently tested" entries were removed because the
+  step-fault, communication-loss FDI, and topology-mode studies are
+  now implemented; ``reproduce_full.log`` refreshed from the same run.
 
 ### Fixed
 

@@ -54,7 +54,7 @@ baseline safe-hold constants are documented in
 | Method      | Utilisation | Health MAE | Kendall τ | Detection delay |
 |-------------|-------------|------------|-----------|-----------------|
 | Oracle      | 0.85        | 0.00       | 1.00      | ~25             |
-| Proposed    | 0.78        | 0.06       | 1.00      | 0               |
+| Proposed    | 0.78        | 0.06       | 1.00      | ~4              |
 | Robust DO   | 0.31        | —          | —         | —               |
 | FDI-Reconf  | 0.54        | —          | —         | ~225            |
 | D-S Fusion  | 0.60        | —          | —         | ~243            |
@@ -73,7 +73,7 @@ estimate continuous health. τ comes from the severity-ladder benchmark
 | Variant A (D-S in loop) | 0.66        |
 | Variant B (Average)     | 0.57        |
 | Variant C (No Sinkhorn) | 0.78        |
-| Variant D (binary)      | 0.52        |
+| Variant D (binary)      | 0.47        |
 | Variant E (no adapt)    | 0.00        |
 
 The full per-metric standard deviation is in
