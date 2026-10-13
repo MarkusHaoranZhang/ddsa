@@ -39,15 +39,16 @@ All calibration constants live in `config.py` and are documented there.
 | High-fidelity comparative (6 methods) | 0.71 / 0.28 / 0.50 / 0.52 / 0.56 / 0.78 | 0.73 / 0.26 / 0.49 / 0.53 / 0.55 / 0.78 |
 | Kendall τ (Proposed) | 0.91 | 1.00 |
 | rho_max margin (§5.2.1) | ~20% | 20.75% |
-| Topology 0.94 crossings (random / high_weight / adjacent) | 5 / 4 / 3 removals | 4 / 8 / 2 removals |
+| Topology 0.94 crossings (random / high_weight / adjacent) | 4 / 3 / 2 removals | 4 / 8 / 2 removals |
 
 Residual notes:
 
 * Byzantine lands +0.02 above the paper; Variant D now agrees with the
-  manuscript within 0.01 (0.47 vs 0.48); the topology crossings differ
-  as described below (random one removal earlier than the manuscript,
-  high-weight removal the most benign in the stand-in). Byzantine is
-  the only utilisation cell outside ±0.02.
+  manuscript within 0.01 (0.47 vs 0.48); among the topology crossings,
+  random and incident-edge modes match the manuscript (4 and 2 removals),
+  while high-weight removal is the most benign in the stand-in (crossing
+  at 8 removals versus the manuscript's 3). Byzantine is the only
+  utilisation cell outside ±0.02.
 * The high-fidelity utilisation ceiling is 0.78 (vs 0.85 numerical):
   the stand-in's residual environment leaves a larger realisable gap,
   and the HF table mirrors the numerical pattern scaled by that
