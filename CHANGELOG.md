@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stale "not independently tested" entries were removed because the
   step-fault, communication-loss FDI, and topology-mode studies are
   now implemented; ``reproduce_full.log`` refreshed from the same run.
+* Repository documentation (``README.md``, ``STATUS.md``,
+  ``CITATION.cff``) synchronized with the final manuscript title
+  (…*of Distributed Optimization: … in Spacecraft Formation Control*)
+  and the two-author byline (Haoran Zhang and Lining Xing); the
+  preferred citation in ``CITATION.cff`` now matches the manuscript.
 
 ### Fixed
 

@@ -1,8 +1,8 @@
 # Project status
 
 This is the public companion code for *Diagnosis-Driven Structural
-Adaptation: A Closed-Loop Architecture for Elastic Degradation in
-Satellite Formation Control*.
+Adaptation of Distributed Optimization: A Closed-Loop Architecture
+for Elastic Degradation in Spacecraft Formation Control*.
 
 For installation, quick-start commands, reference numbers, and the
 figure index, see [`README.md`](README.md). This file is kept lean and
